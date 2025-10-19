@@ -5,7 +5,7 @@ from datetime import time, date
 @dataclass
 class StationTrack:
     platform: int
-    track: int
+    track: str
 
 
 @dataclass
@@ -17,10 +17,18 @@ class TrainSummary:
 
 
 @dataclass
+class TrainStop:
+    station_name: str
+    arrival_time: time | None
+    departure_time: time | None
+    track: StationTrack | None
+
+
+@dataclass
 class Train:
     category: str
     number: int
     name: str | None
-    stations: list[tuple[str, time, time, StationTrack | None]]
+    stops: list[TrainStop]
     params: list[str]
     # days: DateRange  # TODO
