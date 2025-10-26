@@ -42,6 +42,13 @@ class StationTrack:
 
 
 @dataclass
+class Station:
+    name: str
+    latitude: float
+    longitude: float
+
+
+@dataclass
 class TrainSummary:
     category: str
     number: int
