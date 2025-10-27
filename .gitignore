@@ -18,6 +18,7 @@ venv.bak/
 .idea/
 .vscode/
 
-# osmnx cache
+# caches, state
 osmnx_cache/
-
+scraper_state.pkl
+scraper_state_backup.pkl
