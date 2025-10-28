@@ -16,7 +16,7 @@ def _extract_train_number(full_number: str) -> tuple[str, int, str | None]:
     return cat.strip(), int(num), name if name else None
 
 
-def get_train_urls_from_station(station_name: str, date: date) -> list[TrainSummary]:
+def get_train_urls_from_station(station_name: str, date: date) -> list[TrainSummary]:  # TODO: fix Katowice
     payload = {
         "trainname": "",
         "stationname": station_name.replace(" ", "+"),

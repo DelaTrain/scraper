@@ -3,19 +3,27 @@ import signal
 import traceback
 import shutil
 import os
+from time import sleep
 from datetime import datetime
 from .algorithm import ScraperState
 
 
-_interrupted = False
+_interrupted = 0
 STATE_FILE = "scraper_state.pkl"
 STATE_FILE_BACKUP = "scraper_state_backup.pkl"
+_SLEEP_BETWEEN_ITERATIONS = 10  # seconds
 
 
 def handle_interrupt(*_) -> None:
     global _interrupted
-    print("Interrupt received, saving state...")
-    _interrupted = True
+    _interrupted += 1
+    if _interrupted == 1:
+        print("Interrupt received, saving state...")
+    elif _interrupted == 5:
+        print("Force exiting now.")
+        exit(1)
+    else:
+        print(f"Interrupt received {_interrupted} times. Press Ctrl+C 5 times to force exit.")
 
 
 def main(args: list[str]) -> None:
@@ -42,8 +50,10 @@ def main(args: list[str]) -> None:
 
     signal.signal(signal.SIGINT, handle_interrupt)
     try:
-        while not _interrupted and not scraper_state.finished():
+        while _interrupted == 0 and not scraper_state.finished():
+            print("\n--- New iteration of scraping ---")
             scraper_state.scrape()
+            sleep(_SLEEP_BETWEEN_ITERATIONS)
     except Exception as e:
         print("An error occurred. Saving state...")
         traceback.print_exception(e)
