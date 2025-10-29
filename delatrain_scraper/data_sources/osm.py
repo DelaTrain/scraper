@@ -17,9 +17,10 @@ def _all_stations() -> GeoDataFrame:
 
 def get_station_by_name(name: str) -> Station | None:
     stations = _all_stations()
-    matched = stations[stations["name"] == name].iloc[0]
+    matched = stations[stations["name"] == name]
     if matched.empty:
         return None
+    matched = matched.iloc[0]
     lat = float(matched.geometry.y)
     long = float(matched.geometry.x)
     return Station(name, lat, long)  # type: ignore

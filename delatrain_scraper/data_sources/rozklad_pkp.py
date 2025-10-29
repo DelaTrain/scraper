@@ -33,7 +33,7 @@ def get_train_urls_from_station(station_name: str, date: date) -> list[TrainSumm
         full_number = next(tds[0].stripped_strings)
         category, number, _ = _extract_train_number(full_number)
         url = tds[0].a["href"]  # type: ignore
-        days = tds[-1].string
+        days = tds[-1].string.strip() # type: ignore
         trains.append(TrainSummary(category, number, url, days))  # type: ignore
     return trains
 
