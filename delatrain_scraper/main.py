@@ -62,6 +62,7 @@ def main(args: list[str]) -> None:
 
     if args[0] == "export":
         data = scraper_state.get_export_data()
+        jsonpickle.set_encoder_options("json", ensure_ascii=False)
         with open(f"{EXPORT_FILE}.json", "w") as f:
             f.write(jsonpickle.encode(data, unpicklable=False, make_refs=False, indent=2))  # type: ignore
         print("Export completed.")
