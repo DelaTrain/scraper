@@ -4,15 +4,17 @@ import signal
 import traceback
 import shutil
 import os
+import jsonpickle
 from time import sleep
 from datetime import datetime
 from .algorithm import ScraperState
 
 
 _interrupted = 0
-STATE_FILE = "scraper_state.pkl"
-STATE_FILE_BACKUP = "scraper_state_backup.pkl"
-FIXUP_FILE = "fixup_data.csv"
+STATE_FILE = "output/scraper_state.pkl"
+STATE_FILE_BACKUP = "output/scraper_state_backup.pkl"
+FIXUP_FILE = "output/saved_fixups.csv"
+EXPORT_FILE = "output/delatrain"
 _SLEEP_BETWEEN_SCRAPES = 10  # seconds
 _SLEEP_BETWEEN_FIXUPS = 1  # seconds
 
@@ -59,14 +61,16 @@ def main(args: list[str]) -> None:
             return
 
     if args[0] == "export":
-        scraper_state.export_all()
+        data = scraper_state.get_export_data()
+        with open(f"{EXPORT_FILE}.json", "w") as f:
+            f.write(jsonpickle.encode(data, unpicklable=False, make_refs=False, indent=2))  # type: ignore
         print("Export completed.")
         return
 
     signal.signal(signal.SIGINT, handle_interrupt)
     try:
         if args[0] == "resume":
-            while _interrupted == 0 and not scraper_state.scrape_finished():
+            while _interrupted == 0 and not scraper_state.is_scrape_finished():
                 print("\n--- New iteration of scraping ---")
                 scraper_state.scrape()
                 sleep(_SLEEP_BETWEEN_SCRAPES)
@@ -77,7 +81,7 @@ def main(args: list[str]) -> None:
                 csv = pd.DataFrame(columns=[0, 1, 2])
             else:
                 csv = pd.read_csv(FIXUP_FILE, header=None)
-            while _interrupted == 0 and not scraper_state.fixup_finished():
+            while _interrupted == 0 and not scraper_state.is_fixup_finished():
                 print("\n--- New iteration of fixup ---")
                 scraper_state.fixup(csv)
                 sleep(_SLEEP_BETWEEN_FIXUPS)
@@ -91,6 +95,7 @@ def main(args: list[str]) -> None:
         os.remove(STATE_FILE_BACKUP)
     if os.path.exists(STATE_FILE):
         shutil.move(STATE_FILE, STATE_FILE_BACKUP)
+    print("Saving started...")
     with open(STATE_FILE, "wb") as f:
         pickle.dump(scraper_state, f)
     print("Scraper state saved. Exiting.")

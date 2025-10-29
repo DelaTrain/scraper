@@ -33,7 +33,10 @@ def _generate_payload(station: str, day: date, disambiguated: bool = False) -> d
 
 def _ensure_disambiguated(html_raw: str, station: str, day: date) -> BeautifulSoup:
     html = BeautifulSoup(html_raw, "lxml")
-    check = html.find("td", class_="errormessage").string.strip()  # type: ignore
+    check = html.find("td", class_="errormessage")
+    if not check:
+        return html
+    check = check.string.strip()  # type: ignore
     if "jednoznaczne" not in check:
         return html
     select = html.find("select", class_="error")

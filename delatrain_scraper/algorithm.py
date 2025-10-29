@@ -12,8 +12,8 @@ class ScraperState:
     stations_to_scrape: set[Station]
     trains_to_scrape: set[TrainSummary]
     broken_stations: set[str]
-
     day: date
+
     stations: set[Station]
     trains: list[Train]
 
@@ -26,10 +26,16 @@ class ScraperState:
         self.stations = set()
         self.trains = []
 
-    def scrape_finished(self) -> bool:
+    def get_export_data(self) -> dict:
+        return {
+            "stations": self.stations | self.stations_to_scrape,
+            "trains": self.trains,
+        }
+
+    def is_scrape_finished(self) -> bool:
         return not self.stations_to_locate and not self.stations_to_scrape and not self.trains_to_scrape
 
-    def fixup_finished(self) -> bool:
+    def is_fixup_finished(self) -> bool:
         return not self.broken_stations
 
     def _locate_stations(self) -> None:
@@ -80,7 +86,11 @@ class ScraperState:
             print(f"Analyzing subtrain: {subtrain}")
             for stop in subtrain.stops:
                 dummy_station = Station(stop.station_name)
-                if dummy_station not in self.stations and dummy_station not in self.stations_to_scrape:
+                if (
+                    dummy_station not in self.stations
+                    and dummy_station not in self.stations_to_scrape
+                    and stop.station_name not in self.broken_stations
+                ):
                     self.stations_to_locate.add(stop.station_name)
                     print(f"Found new station: {stop.station_name}")
         self.trains_to_scrape.remove(train_summary)
@@ -118,6 +128,3 @@ class ScraperState:
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")
-
-    def export_all(self) -> None:
-        raise NotImplementedError("Export functionality is not implemented yet.")  # TODO

@@ -20,6 +20,4 @@ venv.bak/
 
 # caches, state
 osmnx_cache/
-scraper_state.pkl
-scraper_state_backup.pkl
-fixup_data.csv
+output/
