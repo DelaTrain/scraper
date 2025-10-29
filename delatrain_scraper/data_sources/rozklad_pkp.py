@@ -5,7 +5,10 @@ import re
 from ..structures import TrainSummary, Train, TrainStop, StationTrack
 
 _STATION_REQUEST_URL = "https://old.rozklad-pkp.pl/bin/trainsearch.exe/pn?ld=mobil&protocol=https:&="
-_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0"}
+_REQUEST_ARGS = {
+    "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0"},
+    "cookies": {"HAFAS-PROD-OLD-CL-SSL": "HAFAS-PROD-OLD-03"},
+}
 _TRAIN_NUMBER_REGEX = re.compile(r"^(\D+)(\d+)([^,]*),?$")
 
 
@@ -16,24 +19,42 @@ def _extract_train_number(full_number: str) -> tuple[str, int, str | None]:
     return cat.strip(), int(num), name if name else None
 
 
-def get_train_urls_from_station(station_name: str, date: date) -> list[TrainSummary]:  # TODO: fix Katowice
+def _generate_payload(station: str, day: date, disambiguated: bool = False) -> dict[str, str]:
     payload = {
         "trainname": "",
-        "stationname": station_name.replace(" ", "+"),
+        "stationname": station if disambiguated else station.replace(" ", "+"),
         "selectDate": "oneday",
-        "date": date.strftime("%d.%m.%y"),
+        "date": day.strftime("%d.%m.%y"),
         "time": "",
-        "start": "Szukaj",
+        "start": ["yes", "Szukaj"] if disambiguated else "Szukaj",
     }
-    response = requests.post(_STATION_REQUEST_URL, payload, headers=_HEADERS)
-    html = BeautifulSoup(response.text, "lxml")
+    return payload
+
+
+def _ensure_disambiguated(html_raw: str, station: str, day: date) -> BeautifulSoup:
+    html = BeautifulSoup(html_raw, "lxml")
+    check = html.find("td", class_="errormessage").string.strip()  # type: ignore
+    if "jednoznaczne" not in check:
+        return html
+    select = html.find("select", class_="error")
+    option = next(filter(lambda o: o.string.strip() == station, select.find_all("option")))  # type: ignore
+    value = str(option["value"])
+    url = str(html.find("form", attrs={"name": "ts_trainsearch"})["action"])  # type: ignore
+    payload = _generate_payload(value, day, True)
+    response = requests.post(url, payload, **_REQUEST_ARGS)  # type: ignore
+    return BeautifulSoup(response.text, "lxml")
+
+
+def get_train_urls_from_station(station_name: str, date: date) -> list[TrainSummary]:
+    response = requests.post(_STATION_REQUEST_URL, _generate_payload(station_name, date), **_REQUEST_ARGS)  # type: ignore
+    html = _ensure_disambiguated(response.text, station_name, date)
     trains: list[TrainSummary] = []
     for trs in html.find_all("tr", class_=["zebracol-1", "zebracol-2"]):
         tds = trs.find_all("td")
         full_number = next(tds[0].stripped_strings)
         category, number, _ = _extract_train_number(full_number)
         url = tds[0].a["href"]  # type: ignore
-        days = tds[-1].string.strip() # type: ignore
+        days = tds[-1].string.strip()  # type: ignore
         trains.append(TrainSummary(category, number, url, days))  # type: ignore
     return trains
 
@@ -56,7 +77,7 @@ def _parse_train(full_name: str, stations: list[Tag]) -> Train:
 
 
 def get_full_train_info(url: str) -> list[Train]:
-    response = requests.get(url, headers=_HEADERS)
+    response = requests.get(url, **_REQUEST_ARGS)  # type: ignore
     html = BeautifulSoup(response.text, "lxml")
 
     subtrains: list[tuple[str, list[Tag]]] = []
