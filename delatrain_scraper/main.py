@@ -1,3 +1,4 @@
+import pandas as pd
 import pickle
 import signal
 import traceback
@@ -11,7 +12,9 @@ from .algorithm import ScraperState
 _interrupted = 0
 STATE_FILE = "scraper_state.pkl"
 STATE_FILE_BACKUP = "scraper_state_backup.pkl"
-_SLEEP_BETWEEN_ITERATIONS = 10  # seconds
+FIXUP_FILE = "fixup_data.csv"
+_SLEEP_BETWEEN_SCRAPES = 10  # seconds
+_SLEEP_BETWEEN_FIXUPS = 1  # seconds
 
 
 def handle_interrupt(*_) -> None:
@@ -31,9 +34,16 @@ def main(args: list[str]) -> None:
         day = datetime.strptime(args[0], "%d.%m.%Y").date()
         starting_station = args[1]
         scraper_state = ScraperState(day, starting_station)
+        args.insert(0, "resume")
         print(f"Initialized scraper state for day {scraper_state.day} with starting station '{starting_station}'.")
-    elif len(args) == 1 and args[0] == "export":
-        return  # TODO: implement export
+    elif len(args) != 1:
+        print(
+            "Usage:\npython -m delatrain_scraper <args...>\n\nPossible argument combinations:\n\t<DD.MM.YYYY> <station> - start fresh\n\tresume - resume scraping from saved state\n\tfixup - fix missing station and track data\n\texport - export all data to JSON and msgpack\n\t(no args) - show this help message"
+        )
+        return
+    elif args[0] not in ("resume", "export", "fixup"):
+        print("Bad argument. Run without arguments to see usage.")
+        return
     else:
         try:
             with open(STATE_FILE, "rb") as f:
@@ -48,12 +58,31 @@ def main(args: list[str]) -> None:
             )
             return
 
+    if args[0] == "export":
+        scraper_state.export_all()
+        print("Export completed.")
+        return
+
     signal.signal(signal.SIGINT, handle_interrupt)
     try:
-        while _interrupted == 0 and not scraper_state.finished():
-            print("\n--- New iteration of scraping ---")
-            scraper_state.scrape()
-            sleep(_SLEEP_BETWEEN_ITERATIONS)
+        if args[0] == "resume":
+            while _interrupted == 0 and not scraper_state.scrape_finished():
+                print("\n--- New iteration of scraping ---")
+                scraper_state.scrape()
+                sleep(_SLEEP_BETWEEN_SCRAPES)
+
+        elif args[0] == "fixup":
+            print("Starting fixup process...")
+            if not os.path.exists(FIXUP_FILE):
+                csv = pd.DataFrame(columns=[0, 1, 2])
+            else:
+                csv = pd.read_csv(FIXUP_FILE, header=None)
+            while _interrupted == 0 and not scraper_state.fixup_finished():
+                print("\n--- New iteration of fixup ---")
+                scraper_state.fixup(csv)
+                sleep(_SLEEP_BETWEEN_FIXUPS)
+            csv.to_csv(FIXUP_FILE, index=False, header=False)
+
     except Exception as e:
         print("An error occurred. Saving state...")
         traceback.print_exception(e)

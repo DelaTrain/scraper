@@ -1,3 +1,4 @@
+from pandas import DataFrame
 from dataclasses import dataclass
 from datetime import date
 from .structures import Station, TrainSummary, Train
@@ -10,6 +11,7 @@ class ScraperState:
     stations_to_locate: set[str]
     stations_to_scrape: set[Station]
     trains_to_scrape: set[TrainSummary]
+    broken_stations: set[str]
 
     day: date
     stations: set[Station]
@@ -19,12 +21,16 @@ class ScraperState:
         self.day = day
         self.stations_to_locate = {starting_station}
         self.stations_to_scrape = set()
+        self.broken_stations = set()
         self.trains_to_scrape = set()
         self.stations = set()
         self.trains = []
 
-    def finished(self) -> bool:
+    def scrape_finished(self) -> bool:
         return not self.stations_to_locate and not self.stations_to_scrape and not self.trains_to_scrape
+
+    def fixup_finished(self) -> bool:
+        return not self.broken_stations
 
     def _locate_stations(self) -> None:
         print("Locating stations...")
@@ -33,9 +39,10 @@ class ScraperState:
             if station:
                 print(f"Located station: {station.name} at {station.latitude}, {station.longitude}")
                 self.stations_to_scrape.add(station)
-                self.stations_to_locate.remove(station_name)
             else:
-                raise ValueError(f"Station '{station_name}' could not be located.")
+                print(f"Station '{station_name}' could not be located. Run fixup later to resolve manually.")
+                self.broken_stations.add(station_name)
+            self.stations_to_locate.remove(station_name)
 
     def _choose_station_to_scrape(self) -> Station:
         if not self.stations:
@@ -85,3 +92,32 @@ class ScraperState:
             self._scrape_train()
         elif self.stations_to_scrape:
             self._scrape_station()
+
+    def fixup(self, saved: DataFrame) -> None:
+        station = next(iter(self.broken_stations))
+        print(f"Fixing station: {station}")
+        auto = saved[saved[0] == station]
+        if auto.empty:
+            print(f"OpenStreetMap search: https://www.openstreetmap.org/search?query={station.replace(' ', '+')}")
+            location = input("Paste OpenStreetMap location URL for valid address: ")
+            location = location.strip().rstrip("/").split("/")
+            if len(location) < 5:
+                raise ValueError(
+                    "Invalid URL format. Try something like: https://www.openstreetmap.org/#map=16/48.18513/16.37559"
+                )
+            lat = float(location[-2])
+            lon = float(location[-1])
+            found_station = Station(station, lat, lon)
+            saved.loc[len(saved)] = [station, lat, lon]
+        else:
+            row = auto.iloc[0]
+            lat = float(row[1])
+            lon = float(row[2])
+            found_station = Station(station, lat, lon)
+            print(f"Using saved coordinates: {lat}, {lon}")
+        self.stations.add(found_station)
+        self.broken_stations.remove(station)
+        print("Station fixed successfully.")
+
+    def export_all(self) -> None:
+        raise NotImplementedError("Export functionality is not implemented yet.")  # TODO
