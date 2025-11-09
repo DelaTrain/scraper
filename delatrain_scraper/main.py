@@ -62,6 +62,15 @@ def main(args: list[str]) -> None:
 
     if args[0] == "export":
         data = scraper_state.get_export_data()
+        
+        # # TODO: deal with it in the frontend
+        # for train in data["trains"]:
+        #     train.stops = [
+        #         stop
+        #         for stop in train.stops
+        #         if stop.arrival_time is not None or stop.departure_time is not None
+        #     ]
+
         jsonpickle.set_encoder_options("json", ensure_ascii=False)
         with open(f"{EXPORT_FILE}.json", "w") as f:
             f.write(jsonpickle.encode(data, unpicklable=False, make_refs=False, indent=2))  # type: ignore

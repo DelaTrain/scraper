@@ -88,9 +88,9 @@ class TrainStop:
 class Train:
     category: str
     number: int
-    name: str | None
-    stops: list[TrainStop]
-    params: list[str] = field(default_factory=list)
+    name: str | None = field(compare=False, hash=False)
+    stops: list[TrainStop] = field(compare=False, hash=False)
+    params: list[str] = field(compare=False, hash=False, default_factory=list)
     # days: DateRange  # TODO
 
     def __str__(self) -> str:
