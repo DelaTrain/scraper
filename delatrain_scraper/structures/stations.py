@@ -42,12 +42,11 @@ class StationTrack:
         return cls(_roman_numeral_to_decimal(parts[0]), parts[1])
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class Station:
     name: str
     latitude: float = field(compare=False, hash=False, default=float("nan"))
     longitude: float = field(compare=False, hash=False, default=float("nan"))
-    # connections will be added, that's why not frozen
 
     def distance_to(self, other: Self) -> float:  # haversine formula
         lat1 = radians(self.latitude)

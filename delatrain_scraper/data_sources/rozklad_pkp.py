@@ -80,7 +80,7 @@ def _parse_train(full_name: str, stations: list[Tag]) -> Train:
     return Train(category, number, name, stops)
 
 
-def get_full_train_info(url: str) -> list[Train]:
+def get_full_train_info(url: str, *additional_params: str) -> list[Train]:
     response = requests.get(url, **_REQUEST_ARGS)  # type: ignore
     html = BeautifulSoup(response.text, "lxml")
 
@@ -100,6 +100,7 @@ def get_full_train_info(url: str) -> list[Train]:
     trains = [_parse_train(f, s) for f, s in subtrains]
     info: Tag = main_content.find("span", class_="bold").parent  # type: ignore
     info_list = list(info.stripped_strings)[1:]
+    info_list.extend(additional_params)
     for train in trains:
         train.params = info_list
     return trains

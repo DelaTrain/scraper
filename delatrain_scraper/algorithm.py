@@ -80,7 +80,7 @@ class ScraperState:
     def _scrape_train(self) -> None:
         train_summary = next(iter(self.trains_to_scrape))
         print(f"Scraping train: {train_summary}")
-        train = get_full_train_info(train_summary.url)
+        train = get_full_train_info(train_summary.url, train_summary.days)
         print(f"Train has {len(train)} subtrain(s).")
         self.trains.extend(train)
         for subtrain in train:

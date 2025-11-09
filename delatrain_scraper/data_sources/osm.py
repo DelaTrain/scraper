@@ -3,11 +3,12 @@ from functools import cache
 from geopandas import GeoDataFrame
 from ..structures.stations import Station
 
+osmnx.settings.max_query_area_size = float("inf")
+osmnx.settings.cache_folder = "osmnx_cache"
+
 
 @cache
 def _all_stations() -> GeoDataFrame:
-    osmnx.settings.max_query_area_size = float("inf")
-    osmnx.settings.cache_folder = "osmnx_cache"
     tags = {
         "railway": ["station", "halt"],
     }
