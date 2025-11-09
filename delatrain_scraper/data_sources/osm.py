@@ -1,7 +1,7 @@
 import osmnx
 from functools import cache
 from geopandas import GeoDataFrame
-from ..structures import Station
+from ..structures.stations import Station
 
 
 @cache

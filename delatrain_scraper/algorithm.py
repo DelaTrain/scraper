@@ -1,7 +1,8 @@
 from pandas import DataFrame
 from dataclasses import dataclass
 from datetime import date
-from .structures import Station, TrainSummary, Train
+from .structures.stations import Station
+from .structures.trains import TrainSummary, Train
 from .data_sources.osm import get_station_by_name
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 

@@ -2,7 +2,8 @@ import requests
 from datetime import date, time
 from bs4 import BeautifulSoup, Tag
 import re
-from ..structures import TrainSummary, Train, TrainStop, StationTrack
+from ..structures.stations import StationTrack
+from ..structures.trains import TrainSummary, TrainStop, Train
 
 _STATION_REQUEST_URL = "https://old.rozklad-pkp.pl/bin/trainsearch.exe/pn?ld=mobil&protocol=https:&="
 _REQUEST_ARGS = {
