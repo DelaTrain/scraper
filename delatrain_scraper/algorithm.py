@@ -2,18 +2,22 @@ from pandas import DataFrame
 from dataclasses import dataclass
 from datetime import date
 from .structures.stations import Station
-from .structures.trains import TrainSummary, Train
+from .structures.trains import TrainSummary, Train, TrainStop
 from .data_sources.osm import get_station_by_name
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 
 
 @dataclass
 class ScraperState:
+    day: date
+
     stations_to_locate: set[str]
     stations_to_scrape: set[Station]
-    trains_to_scrape: set[TrainSummary]
+    trains_to_scrape: list[TrainSummary]
+
     broken_stations: set[str]
-    day: date
+    all_stops: dict[TrainStop, Train]  # for fast lookup when handling duplicates
+    blacklisted_trains: list[Train]  # alternative train numbers to ignore
 
     stations: set[Station]
     trains: list[Train]
@@ -22,13 +26,16 @@ class ScraperState:
         self.day = day
         self.stations_to_locate = {starting_station}
         self.stations_to_scrape = set()
+        self.trains_to_scrape = []
         self.broken_stations = set()
-        self.trains_to_scrape = set()
+        self.all_stops = {}
+        self.blacklisted_trains = []
         self.stations = set()
         self.trains = []
 
     def get_export_data(self) -> dict:
         return {
+            "day": self.day,
             "stations": self.stations | self.stations_to_scrape,
             "trains": self.trains,
         }
@@ -69,23 +76,64 @@ class ScraperState:
         print(f"Scraping station: {station.name}")
         train_summaries = get_train_urls_from_station(station.name, self.day)
         for summary in train_summaries:
-            if summary not in self.trains_to_scrape and all(
-                t.category != summary.category or t.number != summary.number for t in self.trains
-            ):
-                self.trains_to_scrape.add(summary)
+            hs = hash(summary)
+            if all(hash(t) != hs for t in self.blacklisted_trains) and all(hash(t) != hs for t in self.trains):
+                self.trains_to_scrape.append(summary)
                 print(f"Found new train: {summary}")
         self.stations_to_scrape.remove(station)
         self.stations.add(station)
 
+    def _find_duplicate_subtrain(self, train: Train) -> Train | None:
+        if train in self.trains:
+            found = next(t for t in self.trains if t == train)
+            print(f"Duplicate subtrain detected by direct match: {found}")
+            return found
+        found = None
+        for existing_stop in train.stops:
+            if existing_stop in self.all_stops:
+                if found == self.all_stops[existing_stop]:
+                    print(
+                        f"Duplicate subtrain detected based on multiple stops (example: {existing_stop.station_name}): {found}"
+                    )
+                    return found
+                found = self.all_stops[existing_stop]
+        return None
+
+    def _handle_duplicate_subtrain(self, train: Train) -> Train:
+        found = self._find_duplicate_subtrain(train)
+        if not found:
+            return train
+        self.blacklisted_trains.extend((train, found))
+        self.trains.remove(found)
+        self.all_stops = {k: v for k, v in self.all_stops.items() if v != found}
+
+        result = found
+        if len(train.stops) > len(found.stops):
+            print("New subtrain has more stops.")
+            result = train
+        elif train.number < found.number:
+            print("New subtrain has lower train number.")
+            result = train
+        else:
+            print("No major improvements found.")
+        result.name = result.name or train.name
+        result.params.update(train.params)
+        return result
+
     def _scrape_train(self) -> None:
-        train_summary = next(iter(self.trains_to_scrape))
+        train_summary = self.trains_to_scrape[-1]
         print(f"Scraping train: {train_summary}")
         train = get_full_train_info(train_summary.url, train_summary.days)
         print(f"Train has {len(train)} subtrain(s).")
-        self.trains.extend(train)
-        for subtrain in train:
+
+        filtered = [t for subtrain in train if (t := self._handle_duplicate_subtrain(subtrain))]
+        self.trains.extend(filtered)
+
+        for subtrain in filtered:
             print(f"Analyzing subtrain: {subtrain}")
             for stop in subtrain.stops:
+                if stop.arrival_time is not None or stop.departure_time is not None:
+                    self.all_stops[stop] = subtrain
                 dummy_station = Station(stop.station_name)
                 if (
                     dummy_station not in self.stations
@@ -94,7 +142,7 @@ class ScraperState:
                 ):
                     self.stations_to_locate.add(stop.station_name)
                     print(f"Found new station: {stop.station_name}")
-        self.trains_to_scrape.remove(train_summary)
+        self.trains_to_scrape.pop()
 
     def scrape(self) -> None:
         if self.stations_to_locate:
@@ -118,14 +166,13 @@ class ScraperState:
                 )
             lat = float(location[-2])
             lon = float(location[-1])
-            found_station = Station(station, lat, lon)
             saved.loc[len(saved)] = [station, lat, lon]
         else:
             row = auto.iloc[0]
             lat = float(row[1])
             lon = float(row[2])
-            found_station = Station(station, lat, lon)
             print(f"Using saved coordinates: {lat}, {lon}")
+        found_station = Station(station, lat, lon)
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")

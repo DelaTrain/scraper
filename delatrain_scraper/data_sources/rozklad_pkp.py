@@ -68,13 +68,12 @@ def _parse_train(full_name: str, stations: list[Tag]) -> Train:
     stops = []
     for row in stations:
         tds = row.find_all("td")
-        tds_len = len(tds)
         station_name = tds[1].a.string.strip()  # type: ignore
         arrival = tds[2].string.strip()  # type: ignore
         arrival_time = time.fromisoformat(arrival) if arrival else None
-        departure = tds[4 if tds_len > 6 else 3].string.strip()  # type: ignore
+        departure = tds[4 if len(tds) > 6 else 3].string.strip()  # type: ignore
         departure_time = time.fromisoformat(departure) if departure else None
-        track = tds[-1].string.strip()  # type: ignore
+        track = tds[-1].string.strip() if len(tds) > 5 else None  # type: ignore
         track_parsed = StationTrack.from_pkp_string(track)
         stops.append(TrainStop(station_name, arrival_time, departure_time, track_parsed))
     return Train(category, number, name, stops)
@@ -89,7 +88,7 @@ def get_full_train_info(url: str, *additional_params: str) -> list[Train]:
     stations_table: Tag = main_content.table  # type: ignore
     for row in stations_table.find_all("tr", class_=["zebracol-1", "zebracol-2"]):
         tds = row.find_all("td")
-        full_name = tds[-2].string.strip()  # type: ignore
+        full_name = tds[-2 if len(tds) > 5 else -1].string.strip()  # type: ignore
         if not full_name:
             subtrains[-1][1].append(row)
             continue
@@ -99,8 +98,8 @@ def get_full_train_info(url: str, *additional_params: str) -> list[Train]:
 
     trains = [_parse_train(f, s) for f, s in subtrains]
     info: Tag = main_content.find("span", class_="bold").parent  # type: ignore
-    info_list = list(info.stripped_strings)[1:]
-    info_list.extend(additional_params)
+    info_list = set(list(info.stripped_strings)[1:])
+    info_list.update(additional_params)
     for train in trains:
         train.params = info_list
     return trains

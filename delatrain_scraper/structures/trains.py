@@ -28,7 +28,7 @@ class Train:
     number: int
     name: str | None = field(compare=False, hash=False)
     stops: list[TrainStop] = field(compare=False, hash=False)
-    params: list[str] = field(compare=False, hash=False, default_factory=list)
+    params: set[str] = field(compare=False, hash=False, default_factory=set)
 
     def __str__(self) -> str:
         return f"{self.category} {self.number}{f' "{self.name}"' if self.name else ''}"

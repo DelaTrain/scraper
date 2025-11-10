@@ -52,7 +52,7 @@ def main(args: list[str]) -> None:
                 scraper_state = pickle.load(f)
             assert isinstance(scraper_state, ScraperState)
             print(
-                f"Resumed scraper state for day {scraper_state.day} with {len(scraper_state.stations)} stations and {len(scraper_state.trains)} trains scraped."
+                f"Resumed scraper state for day {scraper_state.day} with {len(scraper_state.stations)} station(s) and {len(scraper_state.trains)} train(s) scraped."
             )
         except (FileNotFoundError, AssertionError):
             print(
