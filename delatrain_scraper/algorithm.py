@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import date
 from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
+from .structures.position import Position
 from .data_sources.osm import get_station_by_name
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 
@@ -172,7 +173,7 @@ class ScraperState:
             lat = float(row[1])
             lon = float(row[2])
             print(f"Using saved coordinates: {lat}, {lon}")
-        found_station = Station(station, lat, lon)
+        found_station = Station(station, Position(lat, lon))
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")
