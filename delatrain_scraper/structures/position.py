@@ -14,7 +14,7 @@ class Position:
     def unknown(cls) -> Self:
         return cls(float("nan"), float("nan"))
 
-    def distance_to(self, other: Self) -> float:  # haversine formula
+    def distance_to(self, other: Self) -> float:  # haversine formula, in kilometers
         lat1 = radians(self.latitude)
         lon1 = radians(self.longitude)
         lat2 = radians(other.latitude)

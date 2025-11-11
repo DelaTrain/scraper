@@ -41,7 +41,7 @@ class StationTrack:
         return cls(_roman_numeral_to_decimal(parts[0]), parts[1])
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Station:
     name: str
     location: Position = field(compare=False, hash=False, default=Position.unknown())
