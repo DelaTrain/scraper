@@ -18,6 +18,10 @@ venv.bak/
 .idea/
 .vscode/
 
-# caches, state
+# Builds
+build/
+*.egg-info/
+
+# Caches, state
 osmnx_cache/
 output/
