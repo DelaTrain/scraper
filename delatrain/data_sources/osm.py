@@ -41,10 +41,8 @@ def _find_rail(from_station: Station, to_station: Station, graph: networkx.Multi
     if len(path) < 2:
         return None
     points = [Position(graph.nodes[n]["y"], graph.nodes[n]["x"]) for n in path]
-    max_speeds = [
-        float(graph.edges[graph.nodes[path[i]], graph.nodes[path[i + 1]], 0]["maxspeed"] or _DEFAULT_RAIL_MAX_SPEED)
-        for i in range(len(path) - 1)
-    ]
+    edges = [graph.edges[path[i], path[i + 1], 0] for i in range(len(path) - 1)]
+    max_speeds = [float(edge.get("maxspeed", _DEFAULT_RAIL_MAX_SPEED)) for edge in edges]
     return Rail(from_station.name, to_station.name, points, max_speeds)
 
 
@@ -53,7 +51,7 @@ def _is_rail_redundant(rail: Rail, stations: list[Station]) -> bool:
         if station.name in (rail.start_station, rail.end_station):
             continue
         for point in rail.points:
-            if station.location.distance_to(point) < _STATION_HITBOX_RADIUS:
+            if station.location.distance_to(point) < _STATION_HITBOX_RADIUS / 1000:
                 return True
     return False
 

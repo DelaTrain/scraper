@@ -1,5 +1,5 @@
 from pandas import DataFrame
-from dataclasses import dataclass
+from dataclasses import dataclass, InitVar, field
 from datetime import date
 from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
@@ -13,42 +13,32 @@ from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_trai
 class ScraperState:
     # Inputs
     day: date
-    rail_radius: int  # finding radius, in kilometers
-    rail_interval: int  # resampling interval, in meters
+    starting_station: InitVar[str]
+    rail_radius: int = 0  # finding radius, in kilometers
+    rail_interval: int = 0  # resampling interval, in meters
 
     # Scraper queues
-    stations_to_locate: set[str]
-    stations_to_scrape: set[Station]
-    trains_to_scrape: list[TrainSummary]
+    stations_to_locate: set[str] = field(default_factory=set)
+    stations_to_scrape: set[Station] = field(default_factory=set)
+    trains_to_scrape: list[TrainSummary] = field(default_factory=list)
 
     # Scraper helpers
-    broken_stations: set[str]
-    all_stops: dict[TrainStop, Train]  # for fast lookup when handling duplicates
-    blacklisted_trains: list[Train]  # alternative train numbers to ignore
+    broken_stations: set[str] = field(default_factory=set)
+    all_stops: dict[TrainStop, Train] = field(default_factory=dict)  # for fast lookup when handling duplicates
+    blacklisted_trains: list[Train] = field(default_factory=list)  # alternative train numbers to ignore
 
     # Scraper results
-    stations: set[Station]
-    trains: list[Train]
+    stations: set[Station] = field(default_factory=set)
+    trains: list[Train] = field(default_factory=list)
 
     # Pathfinding queues
-    rails_to_find: set[Station]
+    rails_to_find: set[Station] = field(default_factory=set)
 
     # Pathfinding results
-    rails: dict[tuple[str, str], Rail]
+    rails: dict[tuple[str, str], Rail] = field(default_factory=dict)
 
-    def __init__(self, day: date, starting_station: str) -> None:
-        self.day = day
-        self.rail_radius = 0
-        self.rail_interval = 0
-        self.stations_to_locate = {starting_station}
-        self.stations_to_scrape = set()
-        self.trains_to_scrape = []
-        self.broken_stations = set()
-        self.all_stops = {}
-        self.blacklisted_trains = []
-        self.stations = set()
-        self.trains = []
-        self.rails = {}
+    def __post_init__(self, starting_station: str) -> None:
+        self.stations_to_locate.add(starting_station)
 
     def get_export_data(self) -> dict:
         return {
@@ -63,6 +53,9 @@ class ScraperState:
 
     def is_fixup_finished(self) -> bool:
         return not self.broken_stations
+
+    def is_pathfinding_finished(self) -> bool:
+        return not self.rails_to_find
 
     def _locate_stations(self) -> None:
         print("Locating stations...")
@@ -217,6 +210,12 @@ class ScraperState:
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")
+
+    def pathfind(self) -> None:
+        if self.rails_to_find:
+            station = next(iter(self.rails_to_find))
+            self._find_rails_from_station(station)
+            self.rails_to_find.remove(station)
 
     def reset_pathfinding(self, radius: int, interval: int) -> None:
         self.rail_radius = radius

@@ -102,6 +102,7 @@ def graceful_shutdown(function: Callable[[ScraperState], None], state: ScraperSt
 
 
 def scraper_main(state: ScraperState) -> None:
+    print("Starting scraping...")
     while _interrupted == 0 and not state.is_scrape_finished():
         time_start = time()
         print("\n--- New iteration of scraping ---")
@@ -126,6 +127,7 @@ def fixup_main(state: ScraperState) -> None:
 
 
 def export_main(state: ScraperState) -> None:
+    print("Starting export...")
     data = state.get_export_data()
     jsonpickle.set_encoder_options("json", ensure_ascii=False)
     with open(f"{EXPORT_FILE}.json", "w") as f:
@@ -134,7 +136,14 @@ def export_main(state: ScraperState) -> None:
 
 
 def paths_main(state: ScraperState) -> None:
-    pass
+    print("Starting pathfinding...")
+    if state.is_pathfinding_finished():
+        print("Pathfinding is already finished or was never started.")
+        return
+    while _interrupted == 0 and not state.is_pathfinding_finished():
+        print("\n--- New iteration of pathfinding ---")
+        state.pathfind()
+        sleep(_sleep)
 
 
 def main() -> None:
