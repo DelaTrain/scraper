@@ -8,13 +8,13 @@ from .structures.paths import Rail
 from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 
-_RAIL_FINDING_RADIUS = 15  # in kilometers
-_RAIL_RESAMPLING_INTERVAL = 200  # in meters
-
 
 @dataclass
 class ScraperState:
+    # Inputs
     day: date
+    rail_radius: int  # finding radius, in kilometers
+    rail_interval: int  # resampling interval, in meters
 
     # Scraper queues
     stations_to_locate: set[str]
@@ -38,6 +38,8 @@ class ScraperState:
 
     def __init__(self, day: date, starting_station: str) -> None:
         self.day = day
+        self.rail_radius = 0
+        self.rail_interval = 0
         self.stations_to_locate = {starting_station}
         self.stations_to_scrape = set()
         self.trains_to_scrape = []
@@ -173,7 +175,7 @@ class ScraperState:
         nearby_stations = [
             s
             for s in self.stations | self.stations_to_scrape
-            if s != station and station.distance_to(s) < _RAIL_FINDING_RADIUS
+            if s != station and station.distance_to(s) < self.rail_radius
         ]
         rails, better_lat, better_lon = find_rails_to_adjacent_stations(station, nearby_stations)
 
@@ -182,7 +184,7 @@ class ScraperState:
             key = (rail.start_station, rail.end_station)
             if key not in self.rails:
                 original_length = rail.length
-                rail.simplify_by_resampling(_RAIL_RESAMPLING_INTERVAL)
+                rail.simplify_by_resampling(self.rail_interval)
                 temp_rails[key] = rail
                 print(
                     f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km"
@@ -215,3 +217,10 @@ class ScraperState:
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")
+
+    def reset_pathfinding(self, radius: int, interval: int) -> None:
+        self.rail_radius = radius
+        self.rail_interval = interval
+        self.rails_to_find = self.stations | self.stations_to_scrape
+        self.rails = {}
+        print(f"Initialized pathfinding state with radius {radius} km and interval {interval} m.")
