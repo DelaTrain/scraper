@@ -7,6 +7,7 @@ import os
 import jsonpickle
 from time import sleep, time
 from datetime import datetime
+from argparse import ArgumentParser
 from .algorithm import ScraperState
 
 
@@ -31,7 +32,43 @@ def handle_interrupt(*_) -> None:
         print(f"Interrupt received {_interrupted} times. Press Ctrl+C 5 times to force exit.")
 
 
-def main(args: list[str]) -> None:
+def get_parser() -> ArgumentParser:
+    parser = ArgumentParser(prog="delatrain", description="Scrape train and rail data for the Delatrain service.")
+    sub = parser.add_subparsers(dest="command", required=True, help="Subcommand to run.")
+
+    scraper = sub.add_parser("scraper", aliases=["s"], help="Scrape PKP data.")
+    scraper_sub = scraper.add_subparsers(dest="scraper_command", required=True, help="Scraper subcommand to run.")
+    scraper_sub.add_parser("continue", aliases=["c"], help="Resume scraping from saved state.")
+    scraper_reset = scraper_sub.add_parser("reset", aliases=["r"], help="Start scraping fresh from a given station and day.")
+    scraper_reset.add_argument("station", type=str, help="Starting station name.")
+    scraper_reset.add_argument(
+        "-d", "--day", type=str, help="Day to scrape data for, in DD.MM.YYYY format (tomorrow if empty)."
+    )
+
+    paths = sub.add_parser("paths", aliases=["p"], help="Find rails and connections.")
+    paths_sub = paths.add_subparsers(dest="paths_command", required=True, help="Paths subcommand to run.")
+    paths_sub.add_parser("continue", aliases=["c"], help="Resume pathfinding from saved state.")
+    paths_reset = paths_sub.add_parser("reset", aliases=["r"], help="Start fresh pathfinding from a given station.")
+    paths_reset.add_argument(
+        "-r", "--radius", type=int, default=15, help="Radius in kilometers to search for adjacent stations (default: 15)."
+    )
+    paths_reset.add_argument(
+        "-i", "--interval", type=int, default=200, help="Resampling interval in meters for found rails (default: 200)."
+    )
+
+    sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
+    sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for missing station data.")
+
+    return parser
+
+
+def main() -> None:
+    parser = get_parser()
+    args = parser.parse_args()
+    print(args)
+
+
+def _main(args: list[str]) -> None:
     if len(args) == 2:
         day = datetime.strptime(args[0], "%d.%m.%Y").date()
         starting_station = args[1]

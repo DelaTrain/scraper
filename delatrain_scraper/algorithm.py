@@ -16,23 +16,29 @@ _RAIL_RESAMPLING_INTERVAL = 200  # in meters
 class ScraperState:
     day: date
 
+    # Scraper queues
     stations_to_locate: set[str]
-    rails_to_find: dict[Station, bool]  # bool indicates whether to attempt scraping
     stations_to_scrape: set[Station]
     trains_to_scrape: list[TrainSummary]
 
+    # Scraper helpers
     broken_stations: set[str]
     all_stops: dict[TrainStop, Train]  # for fast lookup when handling duplicates
     blacklisted_trains: list[Train]  # alternative train numbers to ignore
 
+    # Scraper results
     stations: set[Station]
     trains: list[Train]
+
+    # Pathfinding queues
+    rails_to_find: set[Station]
+
+    # Pathfinding results
     rails: dict[tuple[str, str], Rail]
 
     def __init__(self, day: date, starting_station: str) -> None:
         self.day = day
         self.stations_to_locate = {starting_station}
-        self.rails_to_find = {}
         self.stations_to_scrape = set()
         self.trains_to_scrape = []
         self.broken_stations = set()
@@ -45,18 +51,13 @@ class ScraperState:
     def get_export_data(self) -> dict:
         return {
             "day": self.day,
-            "stations": self.stations | self.stations_to_scrape | set(self.rails_to_find.keys()),
+            "stations": self.stations | self.stations_to_scrape,
             "trains": self.trains,
             "rails": list(self.rails.values()),
         }
 
     def is_scrape_finished(self) -> bool:
-        return (
-            not self.stations_to_locate
-            and not self.stations_to_scrape
-            and not self.trains_to_scrape
-            and not self.rails_to_find
-        )
+        return not self.stations_to_locate and not self.stations_to_scrape and not self.trains_to_scrape
 
     def is_fixup_finished(self) -> bool:
         return not self.broken_stations
@@ -67,41 +68,11 @@ class ScraperState:
             station = get_station_by_name(station_name)
             if station:
                 print(f"Located station: {station.name} at {station.latitude}, {station.longitude}")
-                self.rails_to_find[station] = True
+                self.stations_to_scrape.add(station)
             else:
                 print(f"Station '{station_name}' could not be located. Run fixup later to resolve manually.")
                 self.broken_stations.add(station_name)
             self.stations_to_locate.remove(station_name)
-
-    def _find_rails_from_station(self) -> None:
-        station = next(iter(self.rails_to_find))
-        print(f"Finding rails from station: {station.name}")
-        nearby_stations = [
-            s
-            for s in self.stations | self.stations_to_scrape
-            if s != station and station.distance_to(s) < _RAIL_FINDING_RADIUS
-        ]
-        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station, nearby_stations)
-
-        temp_rails = {}
-        for rail in rails:
-            key = (rail.start_station, rail.end_station)
-            if key not in self.rails:
-                original_length = rail.length
-                rail.simplify_by_resampling(_RAIL_RESAMPLING_INTERVAL)
-                temp_rails[key] = rail
-                print(
-                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km"
-                )
-        station.location = Position(better_lat, better_lon)
-        print(f"Updated station location to: {better_lat}, {better_lon}")
-
-        self.rails.update(temp_rails)
-        to_scrape = self.rails_to_find.pop(station)
-        if to_scrape:
-            self.stations_to_scrape.add(station)
-        else:
-            self.stations.add(station)
 
     def _choose_station_to_scrape(self) -> Station:
         if not self.stations:
@@ -192,12 +163,33 @@ class ScraperState:
     def scrape(self) -> None:
         if self.stations_to_locate:
             self._locate_stations()
-        elif self.rails_to_find:
-            self._find_rails_from_station()
         elif self.trains_to_scrape:
             self._scrape_train()
         elif self.stations_to_scrape:
             self._scrape_station()
+
+    def _find_rails_from_station(self, station: Station) -> None:
+        print(f"Finding rails from station: {station.name}")
+        nearby_stations = [
+            s
+            for s in self.stations | self.stations_to_scrape
+            if s != station and station.distance_to(s) < _RAIL_FINDING_RADIUS
+        ]
+        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station, nearby_stations)
+
+        temp_rails = {}
+        for rail in rails:
+            key = (rail.start_station, rail.end_station)
+            if key not in self.rails:
+                original_length = rail.length
+                rail.simplify_by_resampling(_RAIL_RESAMPLING_INTERVAL)
+                temp_rails[key] = rail
+                print(
+                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km"
+                )
+        station.location = Position(better_lat, better_lon)
+        print(f"Updated station location to: {better_lat}, {better_lon}")
+        self.rails.update(temp_rails)
 
     def fixup(self, saved: DataFrame) -> None:
         station = next(iter(self.broken_stations))
@@ -220,6 +212,6 @@ class ScraperState:
             lon = float(row[2])
             print(f"Using saved coordinates: {lat}, {lon}")
         found_station = Station(station, Position(lat, lon))
-        self.rails_to_find[found_station] = False
+        self.stations.add(found_station)
         self.broken_stations.remove(station)
         print("Station fixed successfully.")
