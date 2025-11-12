@@ -5,7 +5,7 @@ import traceback
 import shutil
 import os
 import jsonpickle
-from time import sleep
+from time import sleep, time
 from datetime import datetime
 from .algorithm import ScraperState
 
@@ -62,14 +62,6 @@ def main(args: list[str]) -> None:
 
     if args[0] == "export":
         data = scraper_state.get_export_data()
-        
-        # # TODO: deal with it in the frontend
-        # for train in data["trains"]:
-        #     train.stops = [
-        #         stop
-        #         for stop in train.stops
-        #         if stop.arrival_time is not None or stop.departure_time is not None
-        #     ]
 
         jsonpickle.set_encoder_options("json", ensure_ascii=False)
         with open(f"{EXPORT_FILE}.json", "w") as f:
@@ -81,9 +73,13 @@ def main(args: list[str]) -> None:
     try:
         if args[0] == "resume":
             while _interrupted == 0 and not scraper_state.is_scrape_finished():
+                time_start = time()
                 print("\n--- New iteration of scraping ---")
                 scraper_state.scrape()
-                sleep(_SLEEP_BETWEEN_SCRAPES)
+                time_end = time()
+                elapsed = time_end - time_start
+                if elapsed < _SLEEP_BETWEEN_SCRAPES:
+                    sleep(_SLEEP_BETWEEN_SCRAPES - elapsed)
 
         elif args[0] == "fixup":
             print("Starting fixup process...")

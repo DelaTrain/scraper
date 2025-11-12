@@ -8,6 +8,7 @@ class Rail:
     start_station: str
     end_station: str
     points: list[Position] = field(compare=False, hash=False, default_factory=list)
+    max_speed: list[float] = field(compare=False, hash=False, default_factory=list)  # in km/h
 
     @property
     @cache
