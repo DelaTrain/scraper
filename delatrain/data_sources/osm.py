@@ -8,6 +8,7 @@ from ..structures.paths import Rail
 
 osmnx.settings.max_query_area_size = float("inf")
 osmnx.settings.cache_folder = "osmnx_cache"
+osmnx.settings.requests_timeout = 600
 
 _STATION_HITBOX_RADIUS = 300  # in meters
 _DEFAULT_RAIL_MAX_SPEED = "120"  # in km/h

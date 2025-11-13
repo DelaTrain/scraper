@@ -1,6 +1,28 @@
 from dataclasses import dataclass, field
-from functools import cache
+from networkx import DiGraph
 from .position import Position
+
+
+def _find_point_at_distance(
+    graph: DiGraph, start_position: Position, distance_km: float
+) -> tuple[list[Position], Position | None]:  # returns (visited_points + next_point, interpolated_point)
+    visited_points = []
+    accumulated_distance = 0.0
+    current_position = start_position
+    while True:
+        next_position = next(graph.successors(current_position), None)
+        if not next_position:
+            return visited_points, None
+        segment_distance = current_position.distance_to(next_position)
+        visited_points.append(next_position)
+        if accumulated_distance + segment_distance >= distance_km:
+            ratio = (distance_km - accumulated_distance) / segment_distance
+            interpolated_x = current_position.longitude + ratio * (next_position.longitude - current_position.longitude)
+            interpolated_y = current_position.latitude + ratio * (next_position.latitude - current_position.latitude)
+            interpolated_point = Position(latitude=interpolated_y, longitude=interpolated_x)
+            return visited_points, interpolated_point
+        accumulated_distance += segment_distance
+        current_position = next_position
 
 
 @dataclass(unsafe_hash=True)
@@ -11,9 +33,78 @@ class Rail:
     max_speed: list[float] = field(compare=False, hash=False, default_factory=list)  # in km/h
 
     @property
-    @cache
     def length(self) -> float:  # in kilometers
         return sum(self.points[i].distance_to(self.points[i + 1]) for i in range(len(self.points) - 1))
-    
+
+    def construct_graph(self) -> DiGraph:
+        graph = DiGraph()
+        for i in range(len(self.points) - 1):
+            p1 = self.points[i]
+            p2 = self.points[i + 1]
+            speed = self.max_speed[i]
+            graph.add_edge(p1, p2, speed=speed)
+        return graph
+
     def simplify_by_resampling(self, interval: int) -> None:  # interval in meters
-        pass  # TODO
+        interval_km = interval / 1000
+        graph = self.construct_graph()
+        current_point = self.points[0]
+        while True:
+            visited_points, interpolated_point = _find_point_at_distance(graph, current_point, interval_km)
+            if not interpolated_point:  # We have reached the end
+                break
+            if len(visited_points) == 1:  # Interval is shorter than the next segment
+                current_point = visited_points[0]
+                continue
+
+            speed = float("inf")
+            speed_current_point = current_point
+            edge_data = None
+            for vp in visited_points:
+                edge_data = graph.get_edge_data(speed_current_point, vp)
+                assert edge_data is not None
+                speed = min(speed, edge_data["speed"])
+                speed_current_point = vp
+
+            graph.remove_nodes_from(visited_points[:-1])
+            graph.add_edge(current_point, interpolated_point, speed=speed)
+            graph.add_edge(interpolated_point, visited_points[-1], speed=edge_data["speed"])  # type: ignore
+            current_point = interpolated_point
+
+        # Handle the last segment to the end point by merging
+        last_point = self.points[-1]
+        speed = float("inf")
+        speed_current_point = last_point
+        accumulated_distance = 0.0
+        while True:
+            predecessor = next(graph.predecessors(speed_current_point), None)
+            if not predecessor:
+                break
+            edge_data = graph.get_edge_data(predecessor, speed_current_point)
+            assert edge_data is not None
+            speed = min(speed, edge_data["speed"])
+            segment_distance = predecessor.distance_to(speed_current_point)
+            accumulated_distance += segment_distance
+            if accumulated_distance >= interval_km:
+                break
+            graph.remove_node(speed_current_point)
+            speed_current_point = predecessor
+        graph.add_edge(speed_current_point, last_point, speed=speed)
+
+        # Remove cycles if any
+        cycles = [(u, v) for u, v in graph.edges() if u == v]
+        graph.remove_edges_from(cycles)
+
+        # Reconstruct points and max_speed from the simplified graph
+        new_points = [self.points[0]]
+        new_max_speed = []
+        while True:
+            next_point = next(graph.successors(new_points[-1]), None)
+            if not next_point:
+                break
+            edge_data = graph.get_edge_data(new_points[-1], next_point)
+            assert edge_data is not None
+            new_max_speed.append(edge_data["speed"])
+            new_points.append(next_point)
+        self.points = new_points
+        self.max_speed = new_max_speed

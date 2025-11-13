@@ -85,6 +85,8 @@ def get_full_train_info(url: str, *additional_params: str) -> list[Train]:
 
     subtrains: list[tuple[str, list[Tag]]] = []
     main_content = html.find("div", id="tq_trainroute_content_table_alteAnsicht")
+    if not main_content:
+        return []
     stations_table: Tag = main_content.table  # type: ignore
     for row in stations_table.find_all("tr", class_=["zebracol-1", "zebracol-2"]):
         tds = row.find_all("td")

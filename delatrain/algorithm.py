@@ -177,10 +177,11 @@ class ScraperState:
             key = (rail.start_station, rail.end_station)
             if key not in self.rails:
                 original_length = rail.length
+                original_points = len(rail.points)
                 rail.simplify_by_resampling(self.rail_interval)
                 temp_rails[key] = rail
                 print(
-                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km"
+                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km, points: {original_points} -> {len(rail.points)}"
                 )
         station.location = Position(better_lat, better_lon)
         print(f"Updated station location to: {better_lat}, {better_lon}")
