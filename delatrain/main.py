@@ -140,6 +140,7 @@ def paths_main(state: ScraperState) -> None:
     if state.is_pathfinding_finished():
         print("Pathfinding is already finished or was never started.")
         return
+    print(f"{len(state.rails_to_find)} stations queued.")
     while _interrupted == 0 and not state.is_pathfinding_finished():
         print("\n--- New iteration of pathfinding ---")
         state.pathfind()

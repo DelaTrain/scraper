@@ -38,7 +38,10 @@ def _find_rail(from_station: Station, to_station: Station, graph: networkx.Multi
     from_station, to_station = sorted((from_station, to_station), key=lambda s: s.name)
     from_node = osmnx.nearest_nodes(graph, from_station.longitude, from_station.latitude)
     to_node = osmnx.nearest_nodes(graph, to_station.longitude, to_station.latitude)
-    path = networkx.shortest_path(graph, from_node, to_node, weight="length")
+    try:
+        path = networkx.shortest_path(graph, from_node, to_node, weight="length")
+    except networkx.NetworkXNoPath:
+        return None
     if len(path) < 2:
         return None
     points = [Position(graph.nodes[n]["y"], graph.nodes[n]["x"]) for n in path]
@@ -71,6 +74,7 @@ def find_rails_to_adjacent_stations(
         dist_type="bbox",
         custom_filter=tags,
         simplify=False,
+        retain_all=True,
     )
     main_node = osmnx.nearest_nodes(graph, main_station.longitude, main_station.latitude)
     rails = [rail for station in nearby_stations if (rail := _find_rail(main_station, station, graph))]
