@@ -23,6 +23,18 @@ def _all_stations() -> GeoDataFrame:
     return gdf
 
 
+@cache
+def _all_rails() -> networkx.MultiDiGraph:
+    tags = '["railway"~"construction|rail"]'
+    graph = osmnx.graph_from_place(
+        "Poland",
+        custom_filter=tags,
+        simplify=False,
+        retain_all=True,
+    )
+    return graph
+
+
 def get_station_by_name(name: str) -> Station | None:
     stations = _all_stations()
     matched = stations[stations["name"] == name]

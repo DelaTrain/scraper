@@ -33,9 +33,11 @@ class ScraperState:
 
     # Pathfinding queues
     rails_to_find: set[Station] = field(default_factory=set)
+    trains_to_analyze: list[Train] = field(default_factory=list)
 
     # Pathfinding results
     rails: dict[tuple[str, str], Rail] = field(default_factory=dict)
+    routing_rules: dict[tuple[str, str], None] = field(default_factory=dict)  # TODO
 
     def __post_init__(self, starting_station: str) -> None:
         self.stations_to_locate.add(starting_station)

@@ -5,10 +5,12 @@ import traceback
 import shutil
 import os
 import jsonpickle
+import zipfile
 from time import sleep, time
 from typing import Callable
 from datetime import datetime, timedelta
 from argparse import ArgumentParser
+from functools import partial
 from .algorithm import ScraperState
 
 
@@ -64,7 +66,8 @@ def get_parser() -> ArgumentParser:
         "-i", "--interval", type=int, default=200, help="Resampling interval in meters for found rails (default: 200)."
     )
 
-    sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
+    export = sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
+    export.add_argument("-c", "--chunked", action="store_true", help="Export data to a chunked zip.")
     sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for missing station data.")
 
     return parser
@@ -126,13 +129,20 @@ def fixup_main(state: ScraperState) -> None:
     csv.to_csv(FIXUP_FILE, index=False, header=False)
 
 
-def export_main(state: ScraperState) -> None:
+def export_main(state: ScraperState, chunked: bool) -> None:
     print("Starting export...")
-    data = state.get_export_data()
     jsonpickle.set_encoder_options("json", ensure_ascii=False)
-    with open(f"{EXPORT_FILE}.json", "w") as f:
-        f.write(jsonpickle.encode(data, unpicklable=False, make_refs=False, indent=2))  # type: ignore
-    print("Export completed.")
+    encoder = partial(jsonpickle.encode, unpicklable=False, make_refs=False, indent=2)
+    data = state.get_export_data()
+    if not chunked:
+        with open(f"{EXPORT_FILE}.json", "w") as f:
+            f.write(encoder(data))  # type: ignore
+        print(f"Exported as {EXPORT_FILE}.json")
+        return
+    with zipfile.ZipFile(f"{EXPORT_FILE}.zip", "w", zipfile.ZIP_DEFLATED) as f:  # TODO: actually chunk it
+        f.writestr("all.json", encoder(data))  # type: ignore
+        f.writestr("index.json", encoder({"chunks": ["all"]}))  # type: ignore
+    print(f"Exported as {EXPORT_FILE}.zip")
 
 
 def paths_main(state: ScraperState) -> None:
@@ -171,7 +181,7 @@ def main() -> None:
     elif args.command in ("fixup", "f"):
         graceful_shutdown(fixup_main, scraper_state)
     elif args.command in ("export", "e"):
-        export_main(scraper_state)
+        export_main(scraper_state, args.chunked)
     elif args.command in ("paths", "p"):
         if args.paths_command in ("reset", "r"):
             scraper_state.reset_pathfinding(args.radius, args.interval)
