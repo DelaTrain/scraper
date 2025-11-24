@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from argparse import ArgumentParser
 from functools import partial
 from .algorithm import ScraperState
+from .utils import log
 
 
 _interrupted = 0
@@ -78,12 +79,12 @@ def read_state() -> ScraperState | None:
         with open(STATE_FILE, "rb") as f:
             scraper_state = pickle.load(f)
         assert isinstance(scraper_state, ScraperState)
-        print(
+        log(
             f"Resumed scraper state for day {scraper_state.day} with {len(scraper_state.stations)} station(s), {len(scraper_state.trains)} train(s) and {len(scraper_state.rails)} rail(s)."
         )
         return scraper_state
     except (FileNotFoundError, AssertionError):
-        print("Failed to load scraper state - fresh start required.")
+        log("Failed to load scraper state - fresh start required.")
 
 
 def graceful_shutdown(function: Callable[[ScraperState], None], state: ScraperState) -> None:
@@ -91,24 +92,24 @@ def graceful_shutdown(function: Callable[[ScraperState], None], state: ScraperSt
     try:
         function(state)
     except Exception as e:
-        print("An error occurred. Saving state...")
+        log("An error occurred. Saving state...")
         traceback.print_exception(e)
 
     if os.path.exists(STATE_FILE_BACKUP) and os.path.exists(STATE_FILE):
         os.remove(STATE_FILE_BACKUP)
     if os.path.exists(STATE_FILE):
         shutil.move(STATE_FILE, STATE_FILE_BACKUP)
-    print("Saving started...")
+    log("Saving started...")
     with open(STATE_FILE, "wb") as f:
         pickle.dump(state, f)
-    print("Scraper state saved. Exiting.")
+    log("Scraper state saved. Exiting.")
 
 
 def scraper_main(state: ScraperState) -> None:
-    print("Starting scraping...")
+    log("Starting scraping...")
     while _interrupted == 0 and not state.is_scrape_finished():
         time_start = time()
-        print("\n--- New iteration of scraping ---")
+        print("\n----------  New iteration of scraping  ----------")
         state.scrape()
         time_end = time()
         elapsed = time_end - time_start
@@ -117,42 +118,42 @@ def scraper_main(state: ScraperState) -> None:
 
 
 def fixup_main(state: ScraperState) -> None:
-    print("Starting fixup process...")
+    log("Starting fixup process...")
     if not os.path.exists(FIXUP_FILE):
         csv = pd.DataFrame(columns=[0, 1, 2])
     else:
         csv = pd.read_csv(FIXUP_FILE, header=None)
     while _interrupted == 0 and not state.is_fixup_finished():
-        print("\n--- New iteration of fixup ---")
+        print("\n----------  New iteration of fix-up  ----------")
         state.fixup(csv)
         sleep(_sleep)
     csv.to_csv(FIXUP_FILE, index=False, header=False)
 
 
 def export_main(state: ScraperState, chunked: bool) -> None:
-    print("Starting export...")
+    log("Starting export...")
     jsonpickle.set_encoder_options("json", ensure_ascii=False)
     encoder = partial(jsonpickle.encode, unpicklable=False, make_refs=False, indent=2)
     data = state.get_export_data()
     if not chunked:
         with open(f"{EXPORT_FILE}.json", "w") as f:
             f.write(encoder(data))  # type: ignore
-        print(f"Exported as {EXPORT_FILE}.json")
+        log(f"Exported as {EXPORT_FILE}.json")
         return
     with zipfile.ZipFile(f"{EXPORT_FILE}.zip", "w", zipfile.ZIP_DEFLATED) as f:  # TODO: actually chunk it
         f.writestr("all.json", encoder(data))  # type: ignore
         f.writestr("index.json", encoder({"chunks": ["all"]}))  # type: ignore
-    print(f"Exported as {EXPORT_FILE}.zip")
+    log(f"Exported as {EXPORT_FILE}.zip")
 
 
 def paths_main(state: ScraperState) -> None:
-    print("Starting pathfinding...")
+    log("Starting pathfinding...")
     if state.is_pathfinding_finished():
-        print("Pathfinding is already finished or was never started.")
+        log("Pathfinding is already finished or was never started.")
         return
-    print(f"{len(state.rails_to_find)} stations queued.")
+    log(f"{len(state.rails_to_find)} stations queued.")
     while _interrupted == 0 and not state.is_pathfinding_finished():
-        print("\n--- New iteration of pathfinding ---")
+        print("\n----------  New iteration of pathfinding  ----------")
         state.pathfind()
         sleep(_sleep)
 
@@ -170,7 +171,7 @@ def main() -> None:
         day = datetime.strptime(args.day, "%d.%m.%Y").date() if args.day else datetime.now().date() + timedelta(days=1)
         starting_station = args.station
         scraper_state = ScraperState(day, starting_station)
-        print(f"Initialized scraper state for day {scraper_state.day} with starting station '{starting_station}'.")
+        log(f"Initialized scraper state for day {scraper_state.day} with starting station '{starting_station}'.")
     else:
         scraper_state = read_state()
         if not scraper_state:
