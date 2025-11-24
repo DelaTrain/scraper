@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Self
+from jsonpickle import handlers
 from .position import Position
 
 _ROMAN_NUMERALS = {
@@ -45,6 +46,8 @@ class StationTrack:
 class Station:
     name: str
     location: Position = field(compare=False, hash=False, default=Position.unknown())
+    importance: int = field(compare=False, hash=False, default=0)  # number of trains stopping here
+    accurate_location: Position | None = field(compare=False, hash=False, default=None)  # after finding rails
 
     @property
     def latitude(self) -> float:
@@ -56,3 +59,13 @@ class Station:
 
     def distance_to(self, other: Self) -> float:  # in kilometers
         return self.location.distance_to(other.location)
+
+
+@handlers.register(Station)  # type: ignore
+class StationHandler(handlers.BaseHandler):
+    def flatten(self, obj, data):
+        data["name"] = obj.name
+        location = obj.location if not obj.accurate_location else obj.accurate_location
+        data["location"] = location.__getstate__()
+        data["importance"] = obj.importance
+        return data
