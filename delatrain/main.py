@@ -15,12 +15,12 @@ from .algorithm import ScraperState
 from .utils import log
 
 
-_interrupted = 0
-_sleep = 1
+_interrupted: int = 0
+_sleep: float = 0.0
 
 STATE_FILE = "output/scraper_state.pkl"
 STATE_FILE_BACKUP = "output/scraper_state_backup.pkl"
-FIXUP_FILE = "output/saved_fixups.csv"
+FIXUP_FILE = "output/station_fixups.csv"
 EXPORT_FILE = "output/delatrain"
 
 
@@ -38,7 +38,7 @@ def handle_interrupt(*_) -> None:
 
 def get_parser() -> ArgumentParser:
     parser = ArgumentParser(prog="delatrain", description="Scrape train and rail data for the Delatrain service.")
-    parser.add_argument("-s", "--sleep", type=int, help="Seconds to sleep between iterations.")
+    parser.add_argument("-s", "--sleep", type=float, help="Seconds to sleep between iterations.")
     sub = parser.add_subparsers(dest="command", required=True, help="Subcommand to run.")
 
     scraper = sub.add_parser("scraper", aliases=["s"], help="Scrape PKP data.")
@@ -62,7 +62,21 @@ def get_parser() -> ArgumentParser:
 
     export = sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
     export.add_argument("-c", "--chunked", action="store_true", help="Export data to a chunked zip.")
-    sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for missing station data.")
+    
+    fixup = sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for various data.")
+    fixup_sub = fixup.add_subparsers(dest="fixup_command", required=True, help="Fix-up subcommand to run.")
+    fixup_sub.add_parser("stations", aliases=["s"], help="Interactively fix station data.")
+    fixup_sub.add_parser("load", aliases=["l"], help="Load rail fix-ups based on previous additions.")
+    fixup_add = fixup_sub.add_parser("add", aliases=["a"], help="Add a new rail manually.")
+    fixup_add.add_argument("from_station", type=str, help="Starting station name.")
+    fixup_add.add_argument("to_station", type=str, help="Ending station name.")
+    fixup_add.add_argument("-s", "--speed", type=int, default=120, help="Max speed on the rail in km/h (default: 120).")
+    fixup_add.add_argument(
+        "-f",
+        "--follow",
+        type=str,
+        help="Train category and number to follow. Makes multiple connections instead of a direct line.",
+    )
 
     return parser
 
@@ -110,8 +124,9 @@ def scraper_main(state: ScraperState) -> None:
             sleep(_sleep - elapsed)
 
 
-def fixup_main(state: ScraperState) -> None:
-    log("Starting fixup process...")
+def fixup_stations_main(state: ScraperState) -> None:
+    log("Starting station fix-up process...")
+    log(f"{len(state.broken_stations)} stations need to be fixed.")
     if not os.path.exists(FIXUP_FILE):
         csv = pd.DataFrame(columns=[0, 1, 2])
     else:
@@ -156,10 +171,10 @@ def main() -> None:
     global _sleep
     parser = get_parser()
     args = parser.parse_args()
-    if args.sleep:
+    if args.sleep and args.sleep >= 0:
         _sleep = args.sleep
     else:
-        _sleep = 10 if args.command in ("scraper", "s") else 1
+        _sleep = 10.0 if args.command in ("scraper", "s") else 0.5
 
     if args.command in ("scraper", "s") and args.scraper_command in ("reset", "r"):
         day = datetime.strptime(args.day, "%d.%m.%Y").date() if args.day else datetime.now().date() + timedelta(days=1)
@@ -171,13 +186,18 @@ def main() -> None:
         if not scraper_state:
             return
 
-    if args.command in ("scraper", "s"):
-        graceful_shutdown(scraper_main, scraper_state)
-    elif args.command in ("fixup", "f"):
-        graceful_shutdown(fixup_main, scraper_state)
-    elif args.command in ("export", "e"):
-        export_main(scraper_state, args.chunked)
-    elif args.command in ("paths", "p"):
-        if args.paths_command in ("reset", "r"):
-            scraper_state.reset_pathfinding(args.interval)
-        graceful_shutdown(paths_main, scraper_state)
+    match args.command:
+        case "scraper" | "s":
+            graceful_shutdown(scraper_main, scraper_state)
+        case "fixup" | "f":
+            match args.fixup_command:
+                case "stations" | "s":
+                    graceful_shutdown(fixup_stations_main, scraper_state)
+                case _:
+                    log(str(args))
+        case "export" | "e":
+            export_main(scraper_state, args.chunked)
+        case "paths" | "p":
+            if args.paths_command in ("reset", "r"):
+                scraper_state.reset_pathfinding(args.interval)
+            graceful_shutdown(paths_main, scraper_state)

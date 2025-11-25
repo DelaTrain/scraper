@@ -67,7 +67,7 @@ class ScraperState:
                 log(f"Located station: {station.name} at {station.latitude}, {station.longitude}")
                 self.stations_to_scrape.add(station)
             else:
-                log(f"Station '{station_name}' could not be located. Run fixup later to resolve manually.")
+                log(f"Station '{station_name}' could not be located. Run `fixup stations` later to resolve manually.")
                 self.broken_stations.add(station_name)
             self.stations_to_locate.remove(station_name)
 
@@ -165,23 +165,42 @@ class ScraperState:
         elif self.stations_to_scrape:
             self._scrape_station()
 
-    def _find_rails_from_station(self, station: Station) -> None:
-        log(f"Finding rails from station: {station.name}")
-        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station)
-        temp_rails = {}
-        for rail in rails:
-            key = (rail.start_station, rail.end_station)
-            if key not in self.rails:
-                original_length = rail.length
-                original_points = len(rail.points)
-                rail.simplify_by_resampling(self.rail_interval)
-                temp_rails[key] = rail
-                log(
-                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km, points: {original_points} -> {len(rail.points)}"
-                )
-        station.accurate_location = Position(better_lat, better_lon)
-        log(f"Updated station location to: {better_lat}, {better_lon}")
-        self.rails.update(temp_rails)
+    def _cascade_station_deletion(self, station_name: str) -> tuple[list[Train], list[str]]:
+        trains_to_delete = []
+        for train in self.trains:
+            if any(stop.station_name == station_name for stop in train.stops):
+                trains_to_delete.append(train)
+        stations_to_delete = [station_name]
+        for station in self.broken_stations:
+            if station == station_name:
+                continue
+            for train in self.trains:
+                if train in trains_to_delete:
+                    continue
+                if any(stop.station_name == station for stop in train.stops):
+                    break
+            else:
+                stations_to_delete.append(station)
+        return trains_to_delete, stations_to_delete
+
+    def _delete_broken_station(self, station_name: str) -> None:
+        trains_to_delete, stations_to_delete = self._cascade_station_deletion(station_name)
+        log("These trains will be deleted:")
+        for train in trains_to_delete:
+            log(f"- {train}")
+        log("These broken stations will be deleted:")
+        for station in stations_to_delete:
+            log(f"- {station}")
+
+        confirm = input("Are you sure you want to proceed? (y/N) ")
+        if confirm.strip().lower() != "y":
+            raise ValueError("Station deletion aborted")
+
+        for train in trains_to_delete:
+            self.trains.remove(train)
+            self.blacklisted_trains.append(train)
+        for station in stations_to_delete:
+            self.broken_stations.remove(station)
 
     def fixup(self, saved: DataFrame) -> None:
         station = next(iter(self.broken_stations))
@@ -189,7 +208,10 @@ class ScraperState:
         auto = saved[saved[0] == station]
         if auto.empty:
             log(f"OpenStreetMap search: https://www.openstreetmap.org/search?query={station.replace(' ', '+')}")
-            location = input("Paste OpenStreetMap location URL for valid address: ")
+            location = input("Paste OpenStreetMap location URL for a valid address or type 'delete': ")
+            if location.strip().lower() == "delete":
+                self._delete_broken_station(station)
+                return
             location = location.strip().rstrip("/").split("/")
             if len(location) < 5:
                 raise ValueError(
@@ -207,6 +229,24 @@ class ScraperState:
         self.stations.add(found_station)
         self.broken_stations.remove(station)
         log("Station fixed successfully.")
+
+    def _find_rails_from_station(self, station: Station) -> None:
+        log(f"Finding rails from station: {station.name}")
+        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station)
+        temp_rails = {}
+        for rail in rails:
+            key = (rail.start_station, rail.end_station)
+            if key not in self.rails:
+                original_length = rail.length
+                original_points = len(rail.points)
+                rail.simplify_by_resampling(self.rail_interval)
+                temp_rails[key] = rail
+                log(
+                    f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km, points: {original_points} -> {len(rail.points)}"
+                )
+        station.accurate_location = Position(better_lat, better_lon)
+        log(f"Updated station location to: {better_lat}, {better_lon}")
+        self.rails.update(temp_rails)
 
     def pathfind(self) -> None:
         if self.rails_to_find:
