@@ -1,5 +1,6 @@
 import osmnx
-import networkx
+import numpy
+from networkx import MultiDiGraph
 from functools import cache
 from geopandas import GeoDataFrame
 from ..structures.stations import Station
@@ -10,8 +11,12 @@ osmnx.settings.max_query_area_size = float("inf")
 osmnx.settings.cache_folder = "osmnx_cache"
 osmnx.settings.requests_timeout = 600
 
-_STATION_HITBOX_RADIUS = 300  # in meters
+_STATION_SEARCH_CUTOFF = 15  # in kilometers
+_STATION_HITBOX_RADIUS = 100  # in meters
+_AUGMENTED_EDGES_MULTIPLIER = 2.0
 _DEFAULT_RAIL_MAX_SPEED = "120"  # in km/h
+
+_negative_nodes = set()
 
 
 @cache
@@ -24,7 +29,7 @@ def _all_stations() -> GeoDataFrame:
 
 
 @cache
-def _all_rails() -> networkx.MultiDiGraph:
+def _all_rails() -> MultiDiGraph:
     tags = '["railway"~"construction|rail"]'
     graph = osmnx.graph_from_place(
         "Poland",
@@ -33,6 +38,35 @@ def _all_rails() -> networkx.MultiDiGraph:
         retain_all=True,
     )
     return graph
+
+
+def augment_rail_graph(stations: list[Station]) -> None:
+    if _negative_nodes:
+        return  # already augmented
+    graph = _all_rails()
+    for station in stations:
+        graph.add_node(station.augmented_node_id, y=station.latitude, x=station.longitude)
+        _negative_nodes.add(station.augmented_node_id)
+    for node in graph.nodes(data=True):
+        if node[0] < 0:
+            continue
+        for station in stations:
+            distance = station.location.distance_to(Position(node[1]["y"], node[1]["x"]))
+            if distance > _STATION_HITBOX_RADIUS:
+                continue
+            station_node = station.augmented_node_id
+            graph.add_edge(
+                node[0],
+                station_node,
+                length=distance * _AUGMENTED_EDGES_MULTIPLIER,
+                maxspeed=_DEFAULT_RAIL_MAX_SPEED,
+            )
+            graph.add_edge(
+                station_node,
+                node[0],
+                length=distance * _AUGMENTED_EDGES_MULTIPLIER,
+                maxspeed=_DEFAULT_RAIL_MAX_SPEED,
+            )
 
 
 def get_station_by_name(name: str) -> Station | None:
@@ -46,49 +80,21 @@ def get_station_by_name(name: str) -> Station | None:
     return Station(name, Position(lat, long))
 
 
-def _find_rail(from_station: Station, to_station: Station, graph: networkx.MultiDiGraph) -> Rail | None:
-    from_station, to_station = sorted((from_station, to_station), key=lambda s: s.name)
-    from_node = osmnx.nearest_nodes(graph, from_station.longitude, from_station.latitude)
-    to_node = osmnx.nearest_nodes(graph, to_station.longitude, to_station.latitude)
-    try:
-        path = networkx.shortest_path(graph, from_node, to_node, weight="length")
-    except networkx.NetworkXNoPath:
-        return None
-    if len(path) < 2:
-        return None
-    points = [Position(graph.nodes[n]["y"], graph.nodes[n]["x"]) for n in path]
-    edges = [graph.edges[path[i], path[i + 1], 0] for i in range(len(path) - 1)]
-    max_speeds = [float(edge.get("maxspeed", _DEFAULT_RAIL_MAX_SPEED)) for edge in edges]
-    return Rail(from_station.name, to_station.name, points, max_speeds)
+def _find_angle_between(p1: tuple[float, float], p2: tuple[float, float], p3: tuple[float, float]) -> float:
+    a = numpy.array(p1)
+    b = numpy.array(p2)
+    c = numpy.array(p3)
+
+    ba = a - b
+    bc = c - b
+
+    cosine_angle = numpy.dot(ba, bc) / (numpy.linalg.norm(ba) * numpy.linalg.norm(bc))
+    cosine_angle = numpy.clip(cosine_angle, -1.0, 1.0)
+    angle = numpy.arccos(cosine_angle)
+
+    return float(numpy.degrees(angle))
 
 
-def _is_rail_redundant(rail: Rail, stations: list[Station]) -> bool:
-    for station in stations:
-        if station.name in (rail.start_station, rail.end_station):
-            continue
-        for point in rail.points:
-            if station.location.distance_to(point) < _STATION_HITBOX_RADIUS / 1000:
-                return True
-    return False
-
-
-def find_rails_to_adjacent_stations(
-    main_station: Station, nearby_stations: list[Station]
-) -> tuple[list[Rail], float, float]:
-    tags = '["railway"~"construction|rail"]'
-    box_radius = _STATION_HITBOX_RADIUS
-    if nearby_stations:
-        box_radius += max(main_station.distance_to(station) for station in nearby_stations) * 1000
-
-    graph = osmnx.graph_from_point(
-        (main_station.latitude, main_station.longitude),
-        dist=box_radius,
-        dist_type="bbox",
-        custom_filter=tags,
-        simplify=False,
-        retain_all=True,
-    )
-    main_node = osmnx.nearest_nodes(graph, main_station.longitude, main_station.latitude)
-    rails = [rail for station in nearby_stations if (rail := _find_rail(main_station, station, graph))]
-    rails = [rail for rail in rails if not _is_rail_redundant(rail, nearby_stations)]
-    return rails, graph.nodes[main_node]["y"], graph.nodes[main_node]["x"]
+def find_rails_to_adjacent_stations(station: Station) -> tuple[list[Rail], float, float]:
+    graph = _all_rails()
+    raise NotImplementedError

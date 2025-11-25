@@ -5,7 +5,7 @@ from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
 from .structures.position import Position
 from .structures.paths import Rail
-from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations
+from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations, augment_rail_graph
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 from .utils import log
 
@@ -15,7 +15,6 @@ class ScraperState:
     # Inputs
     day: date
     starting_station: InitVar[str]
-    rail_radius: int = 0  # finding radius, in kilometers
     rail_interval: int = 0  # resampling interval, in meters
 
     # Scraper queues
@@ -168,13 +167,7 @@ class ScraperState:
 
     def _find_rails_from_station(self, station: Station) -> None:
         log(f"Finding rails from station: {station.name}")
-        nearby_stations = [
-            s
-            for s in self.stations | self.stations_to_scrape
-            if s != station and station.distance_to(s) < self.rail_radius
-        ]
-        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station, nearby_stations)
-
+        rails, better_lat, better_lon = find_rails_to_adjacent_stations(station)
         temp_rails = {}
         for rail in rails:
             key = (rail.start_station, rail.end_station)
@@ -186,7 +179,7 @@ class ScraperState:
                 log(
                     f"Found rail: {rail.start_station} -> {rail.end_station}, length: {original_length:.2f} -> {rail.length:.2f} km, points: {original_points} -> {len(rail.points)}"
                 )
-        station.location = Position(better_lat, better_lon)
+        station.accurate_location = Position(better_lat, better_lon)
         log(f"Updated station location to: {better_lat}, {better_lon}")
         self.rails.update(temp_rails)
 
@@ -221,9 +214,12 @@ class ScraperState:
             self._find_rails_from_station(station)
             self.rails_to_find.remove(station)
 
-    def reset_pathfinding(self, radius: int, interval: int) -> None:
-        self.rail_radius = radius
+    def prepare_pathfinding(self) -> None:
+        augment_rail_graph(list(self.stations) + list(self.stations_to_scrape))
+        log("Rail graph loaded and augmented with stations.")
+
+    def reset_pathfinding(self, interval: int) -> None:
         self.rail_interval = interval
         self.rails_to_find = self.stations | self.stations_to_scrape
         self.rails = {}
-        log(f"Initialized pathfinding state with radius {radius} km and interval {interval} m.")
+        log(f"Initialized pathfinding state with interval of {interval} m.")

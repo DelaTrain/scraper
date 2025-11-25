@@ -57,13 +57,6 @@ def get_parser() -> ArgumentParser:
     paths_sub.add_parser("continue", aliases=["c"], help="Resume pathfinding from saved state.")
     paths_reset = paths_sub.add_parser("reset", aliases=["r"], help="Start fresh pathfinding from a given station.")
     paths_reset.add_argument(
-        "-r",
-        "--radius",
-        type=int,
-        default=15,
-        help="Radius in kilometers to search for adjacent stations (default: 15).",
-    )
-    paths_reset.add_argument(
         "-i", "--interval", type=int, default=200, help="Resampling interval in meters for found rails (default: 200)."
     )
 
@@ -152,6 +145,7 @@ def paths_main(state: ScraperState) -> None:
         log("Pathfinding is already finished or was never started.")
         return
     log(f"{len(state.rails_to_find)} stations queued.")
+    state.prepare_pathfinding()
     while _interrupted == 0 and not state.is_pathfinding_finished():
         print("\n----------  New iteration of pathfinding  ----------")
         state.pathfind()
@@ -185,5 +179,5 @@ def main() -> None:
         export_main(scraper_state, args.chunked)
     elif args.command in ("paths", "p"):
         if args.paths_command in ("reset", "r"):
-            scraper_state.reset_pathfinding(args.radius, args.interval)
+            scraper_state.reset_pathfinding(args.interval)
         graceful_shutdown(paths_main, scraper_state)

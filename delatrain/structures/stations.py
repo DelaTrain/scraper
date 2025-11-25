@@ -56,6 +56,10 @@ class Station:
     @property
     def longitude(self) -> float:
         return self.location.longitude
+    
+    @property
+    def augmented_node_id(self) -> int:
+        return -abs(hash(self))
 
     def distance_to(self, other: Self) -> float:  # in kilometers
         return self.location.distance_to(other.location)
