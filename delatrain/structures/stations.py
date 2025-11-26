@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Self
 from jsonpickle import handlers
+from functools import cached_property
 from .position import Position
 
 _ROMAN_NUMERALS = {
@@ -56,10 +57,13 @@ class Station:
     @property
     def longitude(self) -> float:
         return self.location.longitude
-    
-    @property
+
+    @cached_property
     def augmented_node_id(self) -> int:
         return -abs(hash(self))
+    
+    def best_location(self) -> Position:
+        return self.accurate_location if self.accurate_location else self.location
 
     def distance_to(self, other: Self) -> float:  # in kilometers
         return self.location.distance_to(other.location)
@@ -69,7 +73,7 @@ class Station:
 class StationHandler(handlers.BaseHandler):
     def flatten(self, obj, data):
         data["name"] = obj.name
-        location = obj.location if not obj.accurate_location else obj.accurate_location
+        location = obj.best_location()
         data["location"] = location.__getstate__()
         data["importance"] = obj.importance
         return data

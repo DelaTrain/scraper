@@ -19,7 +19,7 @@ class TrainStop:
     station_name: str
     arrival_time: time | None
     departure_time: time | None
-    track: StationTrack | None
+    track: StationTrack | None  # TODO: make unhashable and uncomparable
 
 
 @dataclass(unsafe_hash=True)

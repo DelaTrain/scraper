@@ -99,7 +99,12 @@ def get_full_train_info(url: str, *additional_params: str) -> list[Train]:
         subtrains.append((full_name, [row]))
 
     trains = [_parse_train(f, s) for f, s in subtrains]
-    info: Tag = main_content.find("span", class_="bold").parent  # type: ignore
+    any_info = main_content.find("span", class_="bold")
+    if not any_info:
+        for train in trains:
+            train.params = set(additional_params)
+        return trains
+    info: Tag = any_info.parent  # type: ignore
     info_list = set(list(info.stripped_strings)[1:])
     info_list.update(additional_params)
     for train in trains:

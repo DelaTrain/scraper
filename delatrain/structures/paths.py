@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from networkx import DiGraph
+from jsonpickle import handlers
 from .position import Position
+from .stations import Station
 
 
 def _find_point_at_distance(
@@ -27,10 +29,17 @@ def _find_point_at_distance(
 
 @dataclass(unsafe_hash=True)
 class Rail:
-    start_station: str
-    end_station: str
+    start_station: Station
+    end_station: Station
     points: list[Position] = field(compare=False, hash=False, default_factory=list)
     max_speed: list[float] = field(compare=False, hash=False, default_factory=list)  # in km/h
+
+    def __post_init__(self):
+        if self.start_station.name < self.end_station.name:
+            return
+        self.start_station, self.end_station = self.end_station, self.start_station
+        self.points.reverse()
+        self.max_speed.reverse()
 
     @property
     def length(self) -> float:  # in kilometers
@@ -44,6 +53,12 @@ class Rail:
             speed = self.max_speed[i]
             graph.add_edge(p1, p2, speed=speed)
         return graph
+
+    def extend_ends(self, default_speed: int) -> None:
+        self.points.insert(0, self.start_station.location)
+        self.max_speed.insert(0, float(default_speed))
+        self.points.append(self.end_station.location)
+        self.max_speed.append(float(default_speed))
 
     def simplify_by_resampling(self, interval: int) -> None:  # interval in meters
         interval_km = interval / 1000
@@ -108,3 +123,14 @@ class Rail:
             new_points.append(next_point)
         self.points = new_points
         self.max_speed = new_max_speed
+        assert len(self.points) - 1 == len(self.max_speed)
+
+
+@handlers.register(Rail)  # type: ignore
+class RailHandler(handlers.BaseHandler):
+    def flatten(self, obj, data):
+        data["start_station"] = obj.start_station.name
+        data["end_station"] = obj.end_station.name
+        data["points"] = [p.__getstate__() for p in obj.points]
+        data["max_speed"] = obj.max_speed
+        return data
