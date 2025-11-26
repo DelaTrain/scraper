@@ -158,13 +158,6 @@ def find_rails_to_adjacent_stations(
                 path.append(Position(graph.nodes[current]["y"], graph.nodes[current]["x"]))
             current = prev
         speeds.pop()
-        rails.append(
-            Rail(
-                s,
-                station,
-                path,
-                speeds,
-            )
-        )
+        rails.append(Rail(s, station, path, speeds))
     average_location = _average_station_location(station, rails)
     return rails, average_location

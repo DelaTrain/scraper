@@ -51,6 +51,7 @@ def get_parser() -> ArgumentParser:
     scraper_reset.add_argument(
         "-d", "--day", type=str, help="Day to scrape data for, in DD.MM.YYYY format (tomorrow if empty)."
     )
+    scraper_reset.add_argument("-b", "--ban", type=str, help="Comma-separated list of train categories to skip.")
 
     paths = sub.add_parser("paths", aliases=["p"], help="Find rails and connections.")
     paths_sub = paths.add_subparsers(dest="paths_command", required=True, help="Paths subcommand to run.")
@@ -59,10 +60,13 @@ def get_parser() -> ArgumentParser:
     paths_reset.add_argument(
         "-i", "--interval", type=int, default=200, help="Resampling interval in meters for found rails (default: 200)."
     )
+    paths_reset.add_argument(
+        "-m", "--maxspeed", type=int, default=120, help="Default max speed in km/h for broken edges (default: 120)."
+    )
 
     export = sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
     export.add_argument("-c", "--chunked", action="store_true", help="Export data to a chunked zip.")
-    
+
     fixup = sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for various data.")
     fixup_sub = fixup.add_subparsers(dest="fixup_command", required=True, help="Fix-up subcommand to run.")
     fixup_sub.add_parser("stations", aliases=["s"], help="Interactively fix station data.")
@@ -70,7 +74,9 @@ def get_parser() -> ArgumentParser:
     fixup_add = fixup_sub.add_parser("add", aliases=["a"], help="Add a new rail manually.")
     fixup_add.add_argument("from_station", type=str, help="Starting station name.")
     fixup_add.add_argument("to_station", type=str, help="Ending station name.")
-    fixup_add.add_argument("-s", "--speed", type=int, default=120, help="Max speed on the rail in km/h (default: 120).")
+    fixup_add.add_argument(
+        "-s", "--speed", type=int, help="Max speed on the rail in km/h (default: as set in `paths`)."
+    )
     fixup_add.add_argument(
         "-f",
         "--follow",
@@ -179,7 +185,8 @@ def main() -> None:
     if args.command in ("scraper", "s") and args.scraper_command in ("reset", "r"):
         day = datetime.strptime(args.day, "%d.%m.%Y").date() if args.day else datetime.now().date() + timedelta(days=1)
         starting_station = args.station
-        scraper_state = ScraperState(day, starting_station)
+        ban = args.ban.split(",") if args.ban else []
+        scraper_state = ScraperState(day, starting_station, banned_categories=set(ban))
         log(f"Initialized scraper state for day {scraper_state.day} with starting station '{starting_station}'.")
     else:
         scraper_state = read_state()
@@ -199,5 +206,5 @@ def main() -> None:
             export_main(scraper_state, args.chunked)
         case "paths" | "p":
             if args.paths_command in ("reset", "r"):
-                scraper_state.reset_pathfinding(args.interval)
+                scraper_state.reset_pathfinding(args.interval, args.maxspeed)
             graceful_shutdown(paths_main, scraper_state)

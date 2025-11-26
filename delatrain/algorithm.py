@@ -16,6 +16,8 @@ class ScraperState:
     day: date
     starting_station: InitVar[str]
     rail_interval: int = 0  # resampling interval, in meters
+    default_max_speed: int = 0  # in km/h
+    banned_categories: set[str] = field(default_factory=set)
 
     # Scraper queues
     stations_to_locate: set[str] = field(default_factory=set)
@@ -33,6 +35,7 @@ class ScraperState:
 
     # Pathfinding queues
     rails_to_find: set[Station] = field(default_factory=set)
+    rails_to_simplify: dict[tuple[str, str], Rail] = field(default_factory=dict)
     trains_to_analyze: list[Train] = field(default_factory=list)
 
     # Pathfinding results
@@ -89,6 +92,9 @@ class ScraperState:
         log(f"Scraping station: {station.name}")
         train_summaries = get_train_urls_from_station(station.name, self.day)
         for summary in train_summaries:
+            if summary.category in self.banned_categories:
+                log(f"Skipping because of banned train category: {summary}")
+                continue
             hs = hash(summary)
             if all(hash(t) != hs for t in self.blacklisted_trains) and all(hash(t) != hs for t in self.trains):
                 self.trains_to_scrape.append(summary)
@@ -255,11 +261,15 @@ class ScraperState:
             self.rails_to_find.remove(station)
 
     def prepare_pathfinding(self) -> None:
-        augment_rail_graph(list(self.stations) + list(self.stations_to_scrape))
+        augment_rail_graph(list(self.stations) + list(self.stations_to_scrape), self.default_max_speed)
         log("Rail graph loaded and augmented with stations.")
 
-    def reset_pathfinding(self, interval: int) -> None:
+    def reset_pathfinding(self, interval: int, speed: int) -> None:
         self.rail_interval = interval
+        self.default_max_speed = speed
         self.rails_to_find = self.stations | self.stations_to_scrape
+        self.rails_to_simplify = {}
+        self.trains_to_analyze = self.trains.copy()
         self.rails = {}
-        log(f"Initialized pathfinding state with interval of {interval} m.")
+        self.routing_rules = {}
+        log(f"Initialized pathfinding state with interval of {interval} m and max speed of {speed} km/h.")
