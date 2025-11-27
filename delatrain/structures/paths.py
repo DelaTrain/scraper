@@ -6,7 +6,7 @@ from .stations import Station
 
 
 def _find_point_at_distance(
-    graph: DiGraph, start_position: Position, distance_km: float
+    graph: DiGraph, start_position: Position, distance: float
 ) -> tuple[list[Position], Position | None]:  # returns (visited_points + next_point, interpolated_point)
     visited_points = []
     accumulated_distance = 0.0
@@ -17,8 +17,8 @@ def _find_point_at_distance(
             return visited_points, None
         segment_distance = current_position.distance_to(next_position)
         visited_points.append(next_position)
-        if accumulated_distance + segment_distance >= distance_km:
-            ratio = (distance_km - accumulated_distance) / segment_distance
+        if accumulated_distance + segment_distance >= distance:
+            ratio = (distance - accumulated_distance) / segment_distance
             interpolated_x = current_position.longitude + ratio * (next_position.longitude - current_position.longitude)
             interpolated_y = current_position.latitude + ratio * (next_position.latitude - current_position.latitude)
             interpolated_point = Position(latitude=interpolated_y, longitude=interpolated_x)
@@ -55,17 +55,16 @@ class Rail:
         return graph
 
     def extend_ends(self, default_speed: int) -> None:
-        self.points.insert(0, self.start_station.location)
+        self.points.insert(0, self.start_station.best_location())
         self.max_speed.insert(0, float(default_speed))
-        self.points.append(self.end_station.location)
+        self.points.append(self.end_station.best_location())
         self.max_speed.append(float(default_speed))
 
     def simplify_by_resampling(self, interval: int) -> None:  # interval in meters
-        interval_km = interval / 1000
         graph = self.construct_graph()
         current_point = self.points[0]
         while True:
-            visited_points, interpolated_point = _find_point_at_distance(graph, current_point, interval_km)
+            visited_points, interpolated_point = _find_point_at_distance(graph, current_point, interval)
             if not interpolated_point:  # We have reached the end
                 break
             if len(visited_points) == 1:  # Interval is shorter than the next segment
@@ -100,7 +99,7 @@ class Rail:
             speed = min(speed, edge_data["speed"])
             segment_distance = predecessor.distance_to(speed_current_point)
             accumulated_distance += segment_distance
-            if accumulated_distance >= interval_km:
+            if accumulated_distance >= interval:
                 break
             graph.remove_node(speed_current_point)
             speed_current_point = predecessor

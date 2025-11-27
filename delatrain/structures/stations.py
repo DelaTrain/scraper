@@ -65,7 +65,7 @@ class Station:
     def best_location(self) -> Position:
         return self.accurate_location if self.accurate_location else self.location
 
-    def distance_to(self, other: Self) -> float:  # in kilometers
+    def distance_to(self, other: Self) -> float:  # in meters
         return self.location.distance_to(other.location)
 
 

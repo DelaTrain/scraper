@@ -93,7 +93,7 @@ def read_state() -> ScraperState | None:
             scraper_state = pickle.load(f)
         assert isinstance(scraper_state, ScraperState)
         log(
-            f"Resumed scraper state for day {scraper_state.day} with {len(scraper_state.stations)} station(s), {len(scraper_state.trains)} train(s) and {len(scraper_state.rails)} rail(s)."
+            f"Resumed scraper state for day {scraper_state.day} with {len(scraper_state.stations)} station(s), {len(scraper_state.trains)} train(s) and {len(scraper_state.rails | scraper_state.rails_to_simplify)} rail(s)."
         )
         return scraper_state
     except (FileNotFoundError, AssertionError):
@@ -165,8 +165,6 @@ def paths_main(state: ScraperState) -> None:
     if state.is_pathfinding_finished():
         log("Pathfinding is already finished or was never started.")
         return
-    log(f"{len(state.rails_to_find)} stations queued.")
-    state.prepare_pathfinding()
     while _interrupted == 0 and not state.is_pathfinding_finished():
         print("\n----------  New iteration of pathfinding  ----------")
         state.pathfind()
