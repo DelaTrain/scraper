@@ -133,3 +133,16 @@ class RailHandler(handlers.BaseHandler):
         data["points"] = [p.__getstate__() for p in obj.points]
         data["max_speed"] = obj.max_speed
         return data
+
+
+@dataclass(unsafe_hash=True)
+class RoutingRule:
+    start_station: str
+    end_station: str
+    via: list[str] = field(compare=False, hash=False, default_factory=list)
+
+    def __post_init__(self):
+        if self.start_station < self.end_station:
+            return
+        self.start_station, self.end_station = self.end_station, self.start_station
+        self.via.reverse()

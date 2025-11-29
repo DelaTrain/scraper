@@ -5,9 +5,10 @@ from functools import cached_property
 from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
 from .structures.position import Position
-from .structures.paths import Rail
+from .structures.paths import Rail, RoutingRule
 from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
+from .routing import construct_rails_graph, find_rules_for_train
 from .utils import log
 
 
@@ -35,23 +36,31 @@ class ScraperState:
     trains: list[Train] = field(default_factory=list)
 
     # Pathfinding queues
-    rails_to_find: set[Station] = field(default_factory=set)
+    rails_to_find: list[Station] = field(default_factory=list)
     rails_to_simplify: dict[tuple[str, str], Rail] = field(default_factory=dict)
     trains_to_analyze: list[Train] = field(default_factory=list)
 
     # Pathfinding results
     rails: dict[tuple[str, str], Rail] = field(default_factory=dict)
-    routing_rules: dict[tuple[str, str], None] = field(default_factory=dict)  # TODO
+    routing_rules: dict[tuple[str, str], RoutingRule] = field(default_factory=dict)
 
     def __post_init__(self, starting_station: str) -> None:
         self.stations_to_locate.add(starting_station)
 
+    def _usable_stations(self) -> set[Station]:  # TODO: fix caching
+        return self.stations | self.stations_to_scrape
+    
+    @cached_property
+    def _usable_rails(self) -> frozenset[Rail]:
+        return frozenset(self.rails.values()) | frozenset(self.rails_to_simplify.values())
+
     def get_export_data(self) -> dict:
         return {
             "day": self.day,
-            "stations": self.stations | self.stations_to_scrape,
+            "stations": self._usable_stations(),
             "trains": self.trains,
-            "rails": list(self.rails.values()) + list(self.rails_to_simplify.values()),
+            "rails": list(self._usable_rails),
+            "routing": list(self.routing_rules.values()),
         }
 
     def is_scrape_finished(self) -> bool:
@@ -237,14 +246,10 @@ class ScraperState:
         self.broken_stations.remove(station)
         log("Station fixed successfully.")
 
-    @cached_property
-    def _cached_stations(self) -> set[Station]:
-        return self.stations | self.stations_to_scrape
-
     def _find_rails_from_station(self) -> None:
         station = next(iter(self.rails_to_find))
         log(f"Finding rails from station: {station.name}")
-        rails, better_pos = find_rails_to_adjacent_stations(station, self._cached_stations, self.default_max_speed)
+        rails, better_pos = find_rails_to_adjacent_stations(station, self._usable_stations(), self.default_max_speed)
         new_rails = {}
         for rail in rails:
             key = (rail.start_station.name, rail.end_station.name)
@@ -272,15 +277,33 @@ class ScraperState:
     def pathfind(self) -> None:
         if self.rails_to_find:
             self._find_rails_from_station()
-        elif self.rails_to_simplify:
-            self._simplify_rail()
+        # elif self.rails_to_simplify:
+        #     raise NotImplementedError
+        #     self._simplify_rail()
+        elif self.trains_to_analyze:
+            self._analyze_train_route()
 
     def reset_pathfinding(self, interval: int, speed: int) -> None:
         self.rail_interval = interval
         self.default_max_speed = speed
-        self.rails_to_find = self.stations | self.stations_to_scrape
+        for station in self._usable_stations():
+            station.accurate_location = None
+        self.rails_to_find = sorted(self._usable_stations(), key=lambda s: s.name)
         self.rails_to_simplify = {}
         self.trains_to_analyze = self.trains.copy()
         self.rails = {}
         self.routing_rules = {}
         log(f"Initialized pathfinding state with interval of {interval} m and max speed of {speed} km/h.")
+
+    def _analyze_train_route(self) -> None:
+        train = self.trains_to_analyze[-1]
+        log(f"Analyzing train route for: {train}")
+        graph = construct_rails_graph(self._usable_rails)
+        new_rules = find_rules_for_train(graph, train)
+        for rule in new_rules:
+            key = (rule.start_station, rule.end_station)
+            if key not in self.routing_rules:
+                self.routing_rules[key] = rule
+                log(f"Found routing rule: {rule.start_station} -> {rule.end_station}")
+        self.trains_to_analyze.pop()
+
