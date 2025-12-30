@@ -41,11 +41,11 @@ def _all_rails() -> MultiGraph:
     return graph.to_undirected()
 
 
-def get_station_by_name(name: str) -> Station | None:  # TODO: check for duplicates
+def get_station_by_name(name: str) -> Station | None:
     name_fixed = name[:-5] if name.endswith(" (NŻ)") else name
     stations = _all_stations()
     matched = stations[stations["name"] == name_fixed]
-    if matched.empty:
+    if len(matched) != 1:
         return None
     matched = matched.iloc[0]
     lat = float(matched.geometry.y)
