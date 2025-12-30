@@ -1,13 +1,13 @@
 import osmnx
 import numpy
 from networkx import MultiGraph
-from functools import cache
 from geopandas import GeoDataFrame
 from heapq import heappop, heappush, heapify
 from typing import Iterable, Generator
 from ..structures.stations import Station
 from ..structures.position import Position
 from ..structures.paths import Rail
+from ..utils import oneshot_cache
 
 osmnx.settings.max_query_area_size = float("inf")
 osmnx.settings.cache_folder = "osmnx_cache"
@@ -20,7 +20,7 @@ _AUGMENTED_EDGES_MULTIPLIER = 2.0
 _MAX_ANGLE_BETWEEN_RAILS = 75  # in degrees
 
 
-@cache
+@oneshot_cache
 def _all_stations() -> GeoDataFrame:
     tags = {
         "railway": ["station", "halt"],
@@ -29,7 +29,7 @@ def _all_stations() -> GeoDataFrame:
     return gdf
 
 
-@cache
+@oneshot_cache
 def _all_rails() -> MultiGraph:
     tags = '["railway"~"construction|rail"]'
     graph = osmnx.graph_from_place(

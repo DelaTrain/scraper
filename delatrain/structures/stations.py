@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Self
 from jsonpickle import handlers
-from functools import cached_property
 from .position import Position
+from ..utils import oneshot_cache
 
 _ROMAN_NUMERALS = {
     "I": 1,
@@ -58,7 +58,8 @@ class Station:
     def longitude(self) -> float:
         return self.location.longitude
 
-    @cached_property
+    @property
+    @oneshot_cache
     def augmented_node_id(self) -> int:
         return -abs(hash(self))
     

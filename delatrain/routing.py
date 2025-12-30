@@ -1,12 +1,12 @@
 from networkx import Graph, shortest_path, NetworkXNoPath, NodeNotFound
-from functools import cache
+from .utils import oneshot_cache
 from .structures.paths import RoutingRule, Rail
 from .structures.trains import Train
 
 _MAX_PATH_LENGTH_MULTIPLIER = 3.0
 
 
-@cache
+@oneshot_cache
 def construct_rails_graph(rails: frozenset[Rail]) -> Graph:
     graph = Graph()
     for rail in rails:

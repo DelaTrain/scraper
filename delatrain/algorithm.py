@@ -1,7 +1,6 @@
 from pandas import DataFrame
 from dataclasses import dataclass, InitVar, field
 from datetime import date
-from functools import cached_property
 from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
 from .structures.position import Position
@@ -9,7 +8,7 @@ from .structures.paths import Rail, RoutingRule
 from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 from .routing import construct_rails_graph, find_rules_for_train
-from .utils import log
+from .utils import log, oneshot_cache
 
 
 @dataclass
@@ -47,17 +46,20 @@ class ScraperState:
     def __post_init__(self, starting_station: str) -> None:
         self.stations_to_locate.add(starting_station)
 
-    def _usable_stations(self) -> set[Station]:  # TODO: fix caching
+    @property
+    @oneshot_cache
+    def _usable_stations(self) -> set[Station]:
         return self.stations | self.stations_to_scrape
     
-    @cached_property
+    @property
+    @oneshot_cache
     def _usable_rails(self) -> frozenset[Rail]:
         return frozenset(self.rails.values()) | frozenset(self.rails_to_simplify.values())
 
     def get_export_data(self) -> dict:
         return {
             "day": self.day,
-            "stations": self._usable_stations(),
+            "stations": self._usable_stations,
             "trains": self.trains,
             "rails": list(self._usable_rails),
             "routing": list(self.routing_rules.values()),
@@ -249,7 +251,7 @@ class ScraperState:
     def _find_rails_from_station(self) -> None:
         station = next(iter(self.rails_to_find))
         log(f"Finding rails from station: {station.name}")
-        rails, better_pos = find_rails_to_adjacent_stations(station, self._usable_stations(), self.default_max_speed)
+        rails, better_pos = find_rails_to_adjacent_stations(station, self._usable_stations, self.default_max_speed)
         new_rails = {}
         for rail in rails:
             key = (rail.start_station.name, rail.end_station.name)
@@ -281,14 +283,15 @@ class ScraperState:
         #     raise NotImplementedError
         #     self._simplify_rail()
         elif self.trains_to_analyze:
+            raise NotImplementedError
             self._analyze_train_route()
 
     def reset_pathfinding(self, interval: int, speed: int) -> None:
         self.rail_interval = interval
         self.default_max_speed = speed
-        for station in self._usable_stations():
+        for station in self._usable_stations:
             station.accurate_location = None
-        self.rails_to_find = sorted(self._usable_stations(), key=lambda s: s.name)
+        self.rails_to_find = sorted(self._usable_stations, key=lambda s: s.name)
         self.rails_to_simplify = {}
         self.trains_to_analyze = self.trains.copy()
         self.rails = {}
