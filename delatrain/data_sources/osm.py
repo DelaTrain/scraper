@@ -142,6 +142,7 @@ def find_rails_to_adjacent_stations(  # TODO: convert to a class
     station: Station, all_stations: Iterable[Station], default_speed: int
 ) -> tuple[list[Rail], Position]:
     nearby_stations = [s for s in all_stations if s != station and station.distance_to(s) < _STATION_SEARCH_CUTOFF]
+    nearby_stations_inclusive = nearby_stations + [station]
 
     graph = _all_rails()
     pq = []
@@ -164,10 +165,9 @@ def find_rails_to_adjacent_stations(  # TODO: convert to a class
         if current_node in visited:
             continue  # already processed
         for neighbor in _augmented_graph_neighbors(graph, current_node, nearby_stations):
-            if current_node > 0 and neighbor > 0:
-                p = previous[current_node]
+            if current_node > 0 and neighbor > 0 and previous[current_node] > 0:
                 angle = _find_angle_between(
-                    _position_from_node(graph, p, nearby_stations + [station]),
+                    _position_from_node(graph, previous[current_node], nearby_stations_inclusive),
                     _position_from_node(graph, current_node, nearby_stations),
                     _position_from_node(graph, neighbor, nearby_stations),
                 )
@@ -198,7 +198,7 @@ def find_rails_to_adjacent_stations(  # TODO: convert to a class
         while current != station.augmented_node_id:
             prev = previous[current]
             if current > 0:
-                edge_data = _augmented_graph_edge_data(graph, prev, current, nearby_stations + [station], default_speed)
+                edge_data = _augmented_graph_edge_data(graph, prev, current, nearby_stations_inclusive, default_speed)
                 avg_speed = sum(int(d.get("maxspeed", str(default_speed))) for d in edge_data.values()) / len(edge_data)
                 speeds.append(avg_speed)
                 path.append(_position_from_node(graph, current, nearby_stations))
