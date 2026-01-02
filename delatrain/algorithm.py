@@ -5,7 +5,7 @@ from .structures.stations import Station
 from .structures.trains import TrainSummary, Train, TrainStop
 from .structures.position import Position
 from .structures.paths import Rail, RoutingRule
-from .data_sources.osm import get_station_by_name, find_rails_to_adjacent_stations
+from .data_sources.osm import get_station_by_name, RailFinder
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
 from .routing import construct_rails_graph, find_rules_for_train
 from .utils import log, oneshot_cache
@@ -50,7 +50,7 @@ class ScraperState:
     @oneshot_cache
     def _usable_stations(self) -> set[Station]:
         return self.stations | self.stations_to_scrape
-    
+
     @property
     @oneshot_cache
     def _usable_rails(self) -> frozenset[Rail]:
@@ -251,15 +251,19 @@ class ScraperState:
     def _find_rails_from_station(self) -> None:
         station = next(iter(self.rails_to_find))
         log(f"Finding rails from station: {station.name}")
-        rails, better_pos = find_rails_to_adjacent_stations(station, self._usable_stations, self.default_max_speed)
+        rails = RailFinder(station, self._usable_stations, self.default_max_speed).find_rails()
         new_rails = {}
         for rail in rails:
             key = (rail.start_station.name, rail.end_station.name)
             if key not in self.rails_to_simplify:
                 new_rails[key] = rail
-                log(f"Found rail: {rail.start_station.name} -> {rail.end_station.name}")
-        station.accurate_location = better_pos
-        log(f"Updated station location to: {better_pos.latitude}, {better_pos.longitude}")
+                log(f"Found new rail: {rail.start_station.name} -> {rail.end_station.name}")
+            else:
+                log(f"Found duplicate rail: {rail.start_station.name} -> {rail.end_station.name}")
+        if station.accurate_location:
+            log(
+                f"Updated station location to: {station.accurate_location.latitude}, {station.accurate_location.longitude}"
+            )
         self.rails_to_simplify.update(new_rails)
         self.rails_to_find.remove(station)
 
@@ -309,4 +313,3 @@ class ScraperState:
                 self.routing_rules[key] = rule
                 log(f"Found routing rule: {rule.start_station} -> {rule.end_station}")
         self.trains_to_analyze.pop()
-
