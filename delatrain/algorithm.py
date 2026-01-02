@@ -58,7 +58,11 @@ class ScraperState:
 
     def get_export_data(self) -> dict:
         return {
-            "day": self.day,
+            "params": {
+                "day": self.day,
+                "resampling_interval": self.rail_interval,
+                "default_max_speed": self.default_max_speed,
+            },
             "stations": self._usable_stations,
             "trains": self.trains,
             "rails": list(self._usable_rails),
@@ -72,7 +76,7 @@ class ScraperState:
         return not self.broken_stations
 
     def is_pathfinding_finished(self) -> bool:
-        return not self.rails_to_find and not self.rails_to_simplify  # and not self.trains_to_analyze # TODO
+        return not self.rails_to_find and not self.rails_to_simplify and not self.trains_to_analyze
 
     def _locate_stations(self) -> None:
         log("Locating stations...")
@@ -271,21 +275,20 @@ class ScraperState:
         key, rail = next(iter(self.rails_to_simplify.items()))
         log(f"Simplifying rail: {rail.start_station.name} -> {rail.end_station.name}")
         rail.extend_ends(self.default_max_speed)
-        original_length = rail.length
+        original_length = int(rail.length)
         original_points = len(rail.points)
         rail.simplify_by_resampling(self.rail_interval)
         self.rails[key] = rail
         log(
-            f"Simplified rail - length: {original_length:.2f} -> {rail.length:.2f} km, points: {original_points} -> {len(rail.points)}"
+            f"Simplified rail - length: {original_length} -> {int(rail.length)} m, points: {original_points} -> {len(rail.points)}"
         )
         del self.rails_to_simplify[key]
 
     def pathfind(self) -> None:
         if self.rails_to_find:
             self._find_rails_from_station()
-        # elif self.rails_to_simplify:
-        #     raise NotImplementedError
-        #     self._simplify_rail()
+        elif self.rails_to_simplify:
+            self._simplify_rail()
         elif self.trains_to_analyze:
             raise NotImplementedError
             self._analyze_train_route()
@@ -295,9 +298,10 @@ class ScraperState:
         self.default_max_speed = speed
         for station in self._usable_stations:
             station.accurate_location = None
+            station.importance = 0
         self.rails_to_find = sorted(self._usable_stations, key=lambda s: s.name)
         self.rails_to_simplify = {}
-        self.trains_to_analyze = self.trains.copy()
+        self.trains_to_analyze = list(reversed(self.trains))
         self.rails = {}
         self.routing_rules = {}
         log(f"Initialized pathfinding state with interval of {interval} m and max speed of {speed} km/h.")

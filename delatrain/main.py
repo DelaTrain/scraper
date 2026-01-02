@@ -154,9 +154,10 @@ def export_main(state: ScraperState, chunked: bool) -> None:
             f.write(encoder(data))  # type: ignore
         log(f"Exported as {EXPORT_FILE}.json")
         return
-    with zipfile.ZipFile(f"{EXPORT_FILE}.zip", "w", zipfile.ZIP_DEFLATED) as f:  # TODO: actually chunk it
-        f.writestr("all.json", encoder(data))  # type: ignore
-        f.writestr("index.json", encoder({"chunks": ["all"]}))  # type: ignore
+    with zipfile.ZipFile(f"{EXPORT_FILE}.zip", "w", zipfile.ZIP_DEFLATED) as f:
+        for k, v in data.items():
+            f.writestr(f"{k}.json", encoder({k: v}, indent=None, separators=(",", ":")))  # type: ignore
+        f.writestr("index.json", encoder({"chunks": list(data.keys())}))  # type: ignore
     log(f"Exported as {EXPORT_FILE}.zip")
 
 

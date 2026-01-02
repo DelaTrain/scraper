@@ -55,10 +55,12 @@ class Rail:
         return graph
 
     def extend_ends(self, default_speed: int) -> None:
-        self.points.insert(0, self.start_station.best_location())
-        self.max_speed.insert(0, float(default_speed))
-        self.points.append(self.end_station.best_location())
-        self.max_speed.append(float(default_speed))
+        if self.points[0] != self.start_station.best_location():
+            self.points.insert(0, self.start_station.best_location())
+            self.max_speed.insert(0, float(default_speed))
+        if self.points[-1] != self.end_station.best_location():
+            self.points.append(self.end_station.best_location())
+            self.max_speed.append(float(default_speed))
 
     def simplify_by_resampling(self, interval: int) -> None:  # interval in meters
         graph = self.construct_graph()
