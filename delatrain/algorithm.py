@@ -39,6 +39,9 @@ class ScraperState:
     rails_to_simplify: dict[tuple[str, str], Rail] = field(default_factory=dict)
     trains_to_analyze: list[Train] = field(default_factory=list)
 
+    # Pathfinding helpers
+    broken_train_paths: list[Train] = field(default_factory=list)
+
     # Pathfinding results
     rails: dict[tuple[str, str], Rail] = field(default_factory=dict)
     routing_rules: dict[tuple[str, str], RoutingRule] = field(default_factory=dict)
@@ -290,7 +293,6 @@ class ScraperState:
         elif self.rails_to_simplify:
             self._simplify_rail()
         elif self.trains_to_analyze:
-            raise NotImplementedError
             self._analyze_train_route()
 
     def reset_pathfinding(self, interval: int, speed: int) -> None:
@@ -304,16 +306,20 @@ class ScraperState:
         self.trains_to_analyze = list(reversed(self.trains))
         self.rails = {}
         self.routing_rules = {}
+        self.broken_train_paths = []
         log(f"Initialized pathfinding state with interval of {interval} m and max speed of {speed} km/h.")
 
     def _analyze_train_route(self) -> None:
         train = self.trains_to_analyze[-1]
         log(f"Analyzing train route for: {train}")
         graph = construct_rails_graph(self._usable_rails)
-        new_rules = find_rules_for_train(graph, train)
+        new_rules, errors = find_rules_for_train(graph, train)
         for rule in new_rules:
             key = (rule.start_station, rule.end_station)
             if key not in self.routing_rules:
                 self.routing_rules[key] = rule
                 log(f"Found routing rule: {rule.start_station} -> {rule.end_station}")
+        if errors:
+            self.broken_train_paths.append(train)
+            log("Train route analysis encountered errors!")
         self.trains_to_analyze.pop()

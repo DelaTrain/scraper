@@ -33,6 +33,7 @@ class Rail:
     end_station: Station
     points: list[Position] = field(compare=False, hash=False, default_factory=list)
     max_speed: list[float] = field(compare=False, hash=False, default_factory=list)  # in km/h
+    redundant: bool = field(compare=False, hash=False, default=True)
 
     def __post_init__(self):
         if self.start_station.name < self.end_station.name:
@@ -134,6 +135,7 @@ class RailHandler(handlers.BaseHandler):
         data["end_station"] = obj.end_station.name
         data["points"] = [p.__getstate__() for p in obj.points]
         data["max_speed"] = obj.max_speed
+        data["redundant"] = obj.redundant
         return data
 
 
