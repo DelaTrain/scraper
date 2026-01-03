@@ -65,6 +65,7 @@ class ScraperState:
                 "day": self.day,
                 "resampling_interval": self.rail_interval,
                 "default_max_speed": self.default_max_speed,
+                "banned_categories": list(self.banned_categories),
             },
             "stations": self._usable_stations,
             "trains": self.trains,
@@ -312,6 +313,10 @@ class ScraperState:
     def _analyze_train_route(self) -> None:
         train = self.trains_to_analyze[-1]
         log(f"Analyzing train route for: {train}")
+        for stop in train.stops:
+            station = next(s for s in self._usable_stations if s.name == stop.station_name)
+            station.importance += 1
+
         graph = construct_rails_graph(self._usable_rails)
         new_rules, errors = find_rules_for_train(graph, train)
         for rule in new_rules:
