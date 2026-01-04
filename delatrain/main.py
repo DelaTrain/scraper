@@ -61,7 +61,7 @@ def get_parser() -> ArgumentParser:
         "-i", "--interval", type=int, default=200, help="Resampling interval in meters for found rails (default: 200)."
     )
     paths_reset.add_argument(
-        "-m", "--maxspeed", type=int, default=120, help="Default max speed in km/h for broken edges (default: 120)."
+        "-m", "--maxspeed", type=int, default=160, help="Default max speed in km/h for broken edges (default: 160)."
     )
 
     export = sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")

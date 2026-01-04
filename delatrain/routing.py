@@ -36,6 +36,8 @@ def find_rules_for_train(graph: Graph, train: Train) -> tuple[list[RoutingRule],
                 continue
             via = path[1:-1]
             rules.append(RoutingRule(start, end, via))
+            for j in range(len(path) - 1):
+                graph[path[j]][path[j + 1]]["rail"].redundant = False
         except (NetworkXNoPath, NodeNotFound):
             errors = True
     return rules, errors
