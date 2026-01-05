@@ -7,7 +7,7 @@ from .structures.position import Position
 from .structures.paths import Rail, RoutingRule
 from .data_sources.osm import get_station_by_name, RailFinder
 from .data_sources.rozklad_pkp import get_train_urls_from_station, get_full_train_info
-from .routing import construct_rails_graph, find_rules_for_train
+from .routing import construct_rails_graph, find_rules_for_train, find_rule_for_path
 from .utils import log, oneshot_cache
 
 
@@ -335,9 +335,9 @@ class ScraperState:
             return False
         else:
             log(f"Found a path, but it is {via[1]:.2f} times longer than straight line:")
-            print(f"{start} -> ", end='')
+            print(f"{start} -> ", end="")
             for station_name in via[0]:
-                print(f"{station_name} -> ", end='')
+                print(f"{station_name} -> ", end="")
             print(f"{end}")
         log("Please choose an action to fix this:")
         print(" - 's': Skip this train for now.")
@@ -399,3 +399,54 @@ class ScraperState:
             needs_restart |= result
         self.broken_train_paths.pop()
         return needs_restart
+
+    def add_rail(self, start: str, end: str, max_speed: int | None) -> None:
+        log(f"Adding direct rail: {start} -> {end}")
+        rail = Rail(
+            next(s for s in self._usable_stations if s.name == start),
+            next(s for s in self._usable_stations if s.name == end),
+            [],
+            [max_speed or self.default_max_speed],
+            redundant=False,
+        )
+        key = (rail.start_station.name, rail.end_station.name)
+        self.rails[key] = rail
+        log(f"Direct rail added: {rail.start_station.name} -> {rail.end_station.name}")
+
+    def find_route(self, start: str, end: str) -> None:
+        log(f"Finding route: {start} -> {end}")
+        key = (start, end) if start < end else (end, start)
+        if key in self.routing_rules:
+            del self.routing_rules[key]
+            log("Removed previous routing rule for these stations.")
+        if key in self.rails:
+            del self.rails[key]
+            log("Removed previous direct rail for these stations.")
+        graph = construct_rails_graph(self._usable_rails)
+        rule, errors = find_rule_for_path(graph, start, end)
+        if rule:
+            self.routing_rules[(rule.start_station, rule.end_station)] = rule
+            log("Successfully found a route between these stations.")
+            return
+        if not errors:
+            log("A direct rail already exists between these stations.")
+            return
+        via = errors[(start, end)]
+        if via is None:
+            log("No path found between these stations.")
+            return
+        log(f"Found a path, but it is {via[1]:.2f} times longer than straight line:")
+        print(f"{start} -> ", end="")
+        for station_name in via[0]:
+            print(f"{station_name} -> ", end="")
+        print(f"{end}")
+        if input("Do you want to add this automatic route? (y/N) ").strip().lower() == "y":
+            rule = RoutingRule(start, end, via[0])
+            self.routing_rules[key] = rule
+            full_path = rule.full_path
+            for i in range(len(full_path) - 1):
+                s1 = full_path[i]
+                s2 = full_path[i + 1]
+                key = (s1, s2) if s1 < s2 else (s2, s1)
+                self.rails[key].redundant = False
+            log("Automatic route added.")

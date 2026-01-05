@@ -71,6 +71,17 @@ def get_parser() -> ArgumentParser:
     fixup_sub = fixup.add_subparsers(dest="fixup_command", required=True, help="Fix-up subcommand to run.")
     fixup_sub.add_parser("stations", aliases=["s"], help="Interactively fix station data.")
     fixup_sub.add_parser("routing", aliases=["r"], help="Interactively fix routing data.")
+    fixup_add = fixup_sub.add_parser("add", aliases=["a"], help="Add a custom rail between two stations.")
+    fixup_add.add_argument("start", type=str, help="Start station name.")
+    fixup_add.add_argument("end", type=str, help="End station name.")
+    fixup_add.add_argument(
+        "-m", "--maxspeed", type=int, help="Max speed in km/h for the new rail (default: as set in `paths`)."
+    )
+    fixup_recalculate = fixup_sub.add_parser(
+        "find", aliases=["f"], help="Find a route between two stations (after removing previous one)."
+    )
+    fixup_recalculate.add_argument("start", type=str, help="Start station name.")
+    fixup_recalculate.add_argument("end", type=str, help="End station name.")
 
     return parser
 
@@ -213,6 +224,12 @@ def main() -> None:
                     graceful_shutdown(fixup_stations_main, scraper_state)
                 case "routing" | "r":
                     graceful_shutdown(fixup_routing_main, scraper_state)
+                case "add" | "a":
+                    function = partial(ScraperState.add_rail, start=args.start, end=args.end, max_speed=args.maxspeed)
+                    graceful_shutdown(function, scraper_state)
+                case "find" | "f":
+                    function = partial(ScraperState.find_route, start=args.start, end=args.end)
+                    graceful_shutdown(function, scraper_state)
         case "export" | "e":
             export_main(scraper_state, args.chunked)
         case "paths" | "p":
