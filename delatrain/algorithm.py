@@ -76,9 +76,6 @@ class ScraperState:
     def is_scrape_finished(self) -> bool:
         return not self.stations_to_locate and not self.stations_to_scrape and not self.trains_to_scrape
 
-    def is_fixup_finished(self) -> bool:
-        return not self.broken_stations
-
     def is_pathfinding_finished(self) -> bool:
         return not self.rails_to_find and not self.rails_to_simplify and not self.trains_to_analyze
 
@@ -228,7 +225,7 @@ class ScraperState:
         for station in stations_to_delete:
             self.broken_stations.remove(station)
 
-    def fixup(self, saved: DataFrame) -> None:
+    def fixup_stations(self, saved: DataFrame) -> None:
         station = next(iter(self.broken_stations))
         log(f"Fixing station: {station}")
         auto = saved[saved[0] == station]
@@ -326,5 +323,79 @@ class ScraperState:
                 log(f"Found routing rule: {rule.start_station} -> {rule.end_station}")
         if errors:
             self.broken_train_paths.append(train)
-            log("Train route analysis encountered errors!")
+            log("Train route analysis encountered errors! Run `fixup routing` later to resolve manually.")
         self.trains_to_analyze.pop()
+
+    def _fixup_route_section(self, start: str, end: str, via: tuple[list[str], float] | None) -> bool | None:
+        log(f"Fixing routing error in section {start} -> {end}")
+        if via is None:
+            log("No path found between these stations.")
+        elif (start, end) in self.routing_rules or (end, start) in self.routing_rules:
+            log("A routing rule has already been added.")
+            return False
+        else:
+            log(f"Found a path, but it is {via[1]:.2f} times longer than straight line:")
+            print(f"{start} -> ", end='')
+            for station_name in via[0]:
+                print(f"{station_name} -> ", end='')
+            print(f"{end}")
+        log("Please choose an action to fix this:")
+        print(" - 's': Skip this train for now.")
+        print(" - 'd': Add a direct rail between these stations with default max speed.")
+        if via is not None:
+            print(" - 'f': Forcefully add the automatic route.")
+        match input("Your choice: ").strip().lower():
+            case "s":
+                log("Skipping...")
+                return None
+            case "d":
+                log("Adding direct rail.")
+                rail = Rail(
+                    next(s for s in self._usable_stations if s.name == start),
+                    next(s for s in self._usable_stations if s.name == end),
+                    [],
+                    [self.default_max_speed],
+                    redundant=False,
+                )
+                key = (rail.start_station.name, rail.end_station.name)
+                self.rails[key] = rail
+                return True
+            case "f" if via is not None:
+                log("Adding automatic route.")
+                rule = RoutingRule(start, end, via[0])
+                self.routing_rules[(rule.start_station, rule.end_station)] = rule
+                full_path = rule.full_path
+                for i in range(len(full_path) - 1):
+                    s1 = full_path[i]
+                    s2 = full_path[i + 1]
+                    key = (s1, s2) if s1 < s2 else (s2, s1)
+                    self.rails[key].redundant = False
+                return False
+            case _:
+                raise ValueError("Unknown option.")
+
+    def fixup_routing(self) -> bool:
+        train = self.broken_train_paths[-1]
+        log(f"Fixing routing for train: {train}")
+        graph = construct_rails_graph(self._usable_rails)
+        new_rules, errors = find_rules_for_train(graph, train)
+        for rule in new_rules:
+            key = (rule.start_station, rule.end_station)
+            if key not in self.routing_rules:
+                self.routing_rules[key] = rule
+                log(f"Found routing rule: {rule.start_station} -> {rule.end_station}")
+        if not errors:
+            self.broken_train_paths.pop()
+            log("Routing has been fixed.")
+            return False
+
+        needs_restart = False
+        for (start, end), via in errors.items():
+            print()
+            result = self._fixup_route_section(start, end, via)
+            if result is None:
+                self.broken_train_paths.insert(0, train)
+                break
+            needs_restart |= result
+        self.broken_train_paths.pop()
+        return needs_restart

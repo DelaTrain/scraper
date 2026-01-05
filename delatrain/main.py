@@ -70,19 +70,7 @@ def get_parser() -> ArgumentParser:
     fixup = sub.add_parser("fixup", aliases=["f"], help="Perform manual fix-up for various data.")
     fixup_sub = fixup.add_subparsers(dest="fixup_command", required=True, help="Fix-up subcommand to run.")
     fixup_sub.add_parser("stations", aliases=["s"], help="Interactively fix station data.")
-    fixup_sub.add_parser("load", aliases=["l"], help="Load rail fix-ups based on previous additions.")
-    fixup_add = fixup_sub.add_parser("add", aliases=["a"], help="Add a new rail manually.")
-    fixup_add.add_argument("from_station", type=str, help="Starting station name.")
-    fixup_add.add_argument("to_station", type=str, help="Ending station name.")
-    fixup_add.add_argument(
-        "-s", "--speed", type=int, help="Max speed on the rail in km/h (default: as set in `paths`)."
-    )
-    fixup_add.add_argument(
-        "-f",
-        "--follow",
-        type=str,
-        help="Train category and number to follow. Makes multiple connections instead of a direct line.",
-    )
+    fixup_sub.add_parser("routing", aliases=["r"], help="Interactively fix routing data.")
 
     return parser
 
@@ -137,11 +125,24 @@ def fixup_stations_main(state: ScraperState) -> None:
         csv = pd.DataFrame(columns=[0, 1, 2])
     else:
         csv = pd.read_csv(FIXUP_FILE, header=None)
-    while _interrupted == 0 and not state.is_fixup_finished():
+    while _interrupted == 0 and state.broken_stations:
         print("\n----------  New iteration of fix-up  ----------")
-        state.fixup(csv)
+        state.fixup_stations(csv)
         sleep(_sleep)
     csv.to_csv(FIXUP_FILE, index=False, header=False)
+
+
+def fixup_routing_main(state: ScraperState) -> None:
+    log("Starting routing fix-up process...")
+    log(f"{len(state.broken_train_paths)} trains need attention.")
+    needs_restart = False
+    while _interrupted == 0 and not needs_restart and state.broken_train_paths:
+        print("\n----------  New iteration of fix-up  ----------")
+        needs_restart = state.fixup_routing()
+        sleep(_sleep)
+    if needs_restart and state.broken_train_paths:
+        print()
+        log("Due to pathing changes, please restart this script to continue.")
 
 
 def export_main(state: ScraperState, chunked: bool) -> None:
@@ -172,14 +173,25 @@ def paths_main(state: ScraperState) -> None:
         sleep(_sleep)
 
 
+def select_sleep_time(args) -> None:
+    global _sleep
+    if args.sleep and args.sleep >= 0:
+        _sleep = args.sleep
+        return
+    match args.command:  # defaults
+        case "scraper" | "s":
+            _sleep = 10.0
+        case "fixup" | "f":
+            _sleep = 1.0
+        case _:
+            _sleep = 0.0
+
+
 def main() -> None:
     global _sleep
     parser = get_parser()
     args = parser.parse_args()
-    if args.sleep and args.sleep >= 0:
-        _sleep = args.sleep
-    else:
-        _sleep = 10.0 if args.command in ("scraper", "s") else 0.5
+    select_sleep_time(args)
 
     if args.command in ("scraper", "s") and args.scraper_command in ("reset", "r"):
         day = datetime.strptime(args.day, "%d.%m.%Y").date() if args.day else datetime.now().date() + timedelta(days=1)
@@ -199,8 +211,8 @@ def main() -> None:
             match args.fixup_command:
                 case "stations" | "s":
                     graceful_shutdown(fixup_stations_main, scraper_state)
-                case _:
-                    log(str(args))
+                case "routing" | "r":
+                    graceful_shutdown(fixup_routing_main, scraper_state)
         case "export" | "e":
             export_main(scraper_state, args.chunked)
         case "paths" | "p":

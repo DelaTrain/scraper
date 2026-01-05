@@ -150,3 +150,7 @@ class RoutingRule:
             return
         self.start_station, self.end_station = self.end_station, self.start_station
         self.via.reverse()
+    
+    @property
+    def full_path(self) -> list[str]:
+        return [self.start_station] + self.via + [self.end_station]

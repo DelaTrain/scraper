@@ -5,6 +5,8 @@ from .structures.trains import Train
 
 _MAX_PATH_LENGTH_MULTIPLIER = 3.5
 
+RoutingErrors = dict[tuple[str, str], tuple[list[str], float] | None]
+
 
 @oneshot_cache
 def construct_rails_graph(rails: frozenset[Rail]) -> Graph:
@@ -18,9 +20,9 @@ def construct_rails_graph(rails: frozenset[Rail]) -> Graph:
     return graph
 
 
-def find_rules_for_train(graph: Graph, train: Train) -> tuple[list[RoutingRule], bool]:
+def find_rules_for_train(graph: Graph, train: Train) -> tuple[list[RoutingRule], RoutingErrors]:
     rules = []
-    errors = False
+    errors = {}
     for i in range(len(train.stops) - 1):
         start = train.stops[i].station_name
         end = train.stops[i + 1].station_name
@@ -31,13 +33,13 @@ def find_rules_for_train(graph: Graph, train: Train) -> tuple[list[RoutingRule],
             path = shortest_path(graph, start, end, weight="length")
             path_length = sum(graph[path[j]][path[j + 1]]["length"] for j in range(len(path) - 1))
             direct_length = graph.nodes[start]["pos"].distance_to(graph.nodes[end]["pos"])
-            if path_length > direct_length * _MAX_PATH_LENGTH_MULTIPLIER:
-                errors = True
-                continue
             via = path[1:-1]
+            if path_length > direct_length * _MAX_PATH_LENGTH_MULTIPLIER:
+                errors[(start, end)] = via, path_length / direct_length
+                continue
             rules.append(RoutingRule(start, end, via))
             for j in range(len(path) - 1):
                 graph[path[j]][path[j + 1]]["rail"].redundant = False
         except (NetworkXNoPath, NodeNotFound):
-            errors = True
+            errors[(start, end)] = None
     return rules, errors
