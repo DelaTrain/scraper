@@ -14,7 +14,7 @@ osmnx.settings.max_query_area_size = float("inf")
 osmnx.settings.cache_folder = "osmnx_cache"
 osmnx.settings.requests_timeout = 600
 
-_STATION_SEARCH_CUTOFF = 50_000  # in meters
+_STATION_SEARCH_CUTOFF = 100_000  # in meters
 _STATION_HITBOX_RADIUS = 150  # in meters
 _LINE_SAMPLING_DISTANCE = 10  # in meters
 _AUGMENTED_EDGES_MULTIPLIER = 2.0

@@ -3,7 +3,7 @@ from .utils import oneshot_cache
 from .structures.paths import RoutingRule, Rail
 from .structures.trains import Train
 
-_MAX_PATH_LENGTH_MULTIPLIER = 5.0
+_MAX_PATH_LENGTH_MULTIPLIER = 3.5
 
 
 @oneshot_cache
