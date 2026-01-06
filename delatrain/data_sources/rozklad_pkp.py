@@ -7,7 +7,7 @@ from ..structures.trains import TrainSummary, TrainStop, Train
 
 _STATION_REQUEST_URL = "https://old.rozklad-pkp.pl/bin/trainsearch.exe/pn?ld=mobil&protocol=https:&="
 _REQUEST_ARGS = {
-    "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0"},
+    "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0"},
     "cookies": {"HAFAS-PROD-OLD-CL-SSL": "HAFAS-PROD-OLD-03"},
 }
 _TRAIN_NUMBER_REGEX = re.compile(r"^(\D+)(\d+)([^,]*),?$")

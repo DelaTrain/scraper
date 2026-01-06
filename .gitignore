@@ -24,4 +24,4 @@ build/
 
 # Caches, state
 osmnx_cache/
-output/
+output*/

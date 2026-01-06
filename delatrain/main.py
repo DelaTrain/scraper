@@ -18,10 +18,11 @@ from .utils import log
 _interrupted: int = 0
 _sleep: float = 0.0
 
-STATE_FILE = "output/scraper_state.pkl"
-STATE_FILE_BACKUP = "output/scraper_state_backup.pkl"
-FIXUP_FILE = "output/station_fixups.csv"
-EXPORT_FILE = "output/delatrain"
+OUTPUT_DIR = "output"
+STATE_FILE = f"{OUTPUT_DIR}/scraper_state.pkl"
+STATE_FILE_BACKUP = f"{OUTPUT_DIR}/scraper_state_backup.pkl"
+FIXUP_FILE = f"{OUTPUT_DIR}/station_fixups.csv"
+EXPORT_FILE = f"{OUTPUT_DIR}/delatrain"
 
 
 def handle_interrupt(*_) -> None:
@@ -107,6 +108,7 @@ def graceful_shutdown(function: Callable[[ScraperState], None], state: ScraperSt
         log("An error occurred. Saving state...")
         traceback.print_exception(e)
 
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     if os.path.exists(STATE_FILE_BACKUP) and os.path.exists(STATE_FILE):
         os.remove(STATE_FILE_BACKUP)
     if os.path.exists(STATE_FILE):
