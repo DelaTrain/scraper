@@ -27,7 +27,7 @@ A tool to scrape, process and export railway data from the Polish State Railways
     (should take about 30 hours with default sleep time). Also, you may want to skip certain train categories
     (like `LA` - buses in the region of Łódź - they have really weird station data).
 
-3. **Pause and resume scraping**:
+3. *Pause and resume scraping (optional)*:
 
     You can pause the scraper at any time with `CTRL+C` and resume later with:
     ```bash
@@ -67,13 +67,23 @@ A tool to scrape, process and export railway data from the Polish State Railways
     add a new rail, skip the train for now or forcefully generate a connection, regardless of its length.
 
     You may also want to add custom rails and connections between stations that are missing them
-    (see the next section for more details):
+    (or delete them if they are incorrect or you make a mistake):
     ```bash
     $ python -m delatrain fixup add "Start Station" "End Station"
-    $ python -m delatrain fixup find "Start Station" "End Station"
+    $ python -m delatrain fixup delete "Start Station" "End Station"
     ```
 
-7. **Export data**:
+7. *Re-run routing after fix-ups (optional)*:
+
+    If you have added or deleted any rails/connections manually, you may want to re-run pathfinding
+    to recalculate routing data for all trains:
+    ```bash
+    $ python -m delatrain paths reset --routing
+    ```
+
+    After that, you should check the routing fix-up tool again to see if there are any remaining issues.
+
+8. **Export data**:
 
     Finally, export all the data to a zip file:
     ```bash
@@ -105,6 +115,7 @@ The `delatrain` command-line tool provides several subcommands to scrape, fix, p
         -   Options:
             -   `-i`, `--interval` (int): Resampling interval in meters for found rails (default: `200`).
             -   `-m`, `--maxspeed` (int): Default max speed in km/h for broken edges (default: `160`).
+            -   `-r`, `--routing`: Only reset routing data without recalculating rails. When this is used, the above options are ignored.
 
 -   **`export`** (alias: `e`): Export all data to JSON.
 
@@ -120,7 +131,7 @@ The `delatrain` command-line tool provides several subcommands to scrape, fix, p
             -   `end` (string): End station name.
         -   Options:
             -   `-m`, `--maxspeed` (int): Max speed in km/h for the new rail (default: uses paths settings).
-    -   **`find`** (alias: `f`): Find a route between two stations. Also removes any existing rails/connections between them.
+    -   **`delete`** (alias: `d`): Delete a rail between two stations (any rail, not necessarily a custom one).
         -   Arguments:
             -   `start` (string): Start station name.
             -   `end` (string): End station name.

@@ -64,6 +64,9 @@ def get_parser() -> ArgumentParser:
     paths_reset.add_argument(
         "-m", "--maxspeed", type=int, default=160, help="Default max speed in km/h for broken edges (default: 160)."
     )
+    paths_reset.add_argument(
+        "-r", "--routing", action="store_true", help="Only reset routing data without recalculating rails."
+    )
 
     export = sub.add_parser("export", aliases=["e"], help="Export all data to JSON.")
     export.add_argument("-c", "--chunked", action="store_true", help="Export data to a chunked zip.")
@@ -78,11 +81,9 @@ def get_parser() -> ArgumentParser:
     fixup_add.add_argument(
         "-m", "--maxspeed", type=int, help="Max speed in km/h for the new rail (default: as set in `paths`)."
     )
-    fixup_recalculate = fixup_sub.add_parser(
-        "find", aliases=["f"], help="Find a route between two stations (after removing previous one)."
-    )
-    fixup_recalculate.add_argument("start", type=str, help="Start station name.")
-    fixup_recalculate.add_argument("end", type=str, help="End station name.")
+    fixup_delete = fixup_sub.add_parser("delete", aliases=["d"], help="Delete a rail between two stations.")
+    fixup_delete.add_argument("start", type=str, help="Start station name.")
+    fixup_delete.add_argument("end", type=str, help="End station name.")
 
     return parser
 
@@ -229,12 +230,12 @@ def main() -> None:
                 case "add" | "a":
                     function = partial(ScraperState.add_rail, start=args.start, end=args.end, max_speed=args.maxspeed)
                     graceful_shutdown(function, scraper_state)
-                case "find" | "f":
-                    function = partial(ScraperState.find_route, start=args.start, end=args.end)
+                case "delete" | "d":
+                    function = partial(ScraperState.delete_rail, start=args.start, end=args.end)
                     graceful_shutdown(function, scraper_state)
         case "export" | "e":
             export_main(scraper_state, args.chunked)
         case "paths" | "p":
             if args.paths_command in ("reset", "r"):
-                scraper_state.reset_pathfinding(args.interval, args.maxspeed)
+                scraper_state.reset_pathfinding(args.interval, args.maxspeed, args.routing)
             graceful_shutdown(paths_main, scraper_state)
