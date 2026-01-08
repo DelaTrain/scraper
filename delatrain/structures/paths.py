@@ -44,7 +44,8 @@ class Rail:
 
     @property
     def length(self) -> float:  # in kilometers
-        return sum(self.points[i].distance_to(self.points[i + 1]) for i in range(len(self.points) - 1))
+        full_points = [self.start_station.best_location()] + self.points + [self.end_station.best_location()]
+        return sum(full_points[i].distance_to(full_points[i + 1]) for i in range(len(full_points) - 1))
 
     def construct_graph(self) -> DiGraph:
         graph = DiGraph()
